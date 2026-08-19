@@ -68,6 +68,12 @@
 		reverse_proxy ginperium:3000
 	}
 
+	# --- Tipsy Trails (dynamische App): tipsytrails.<DOMAIN> -> Container tipsy-trails ---
+	@tipsy-trails host tipsytrails.{$DOMAIN}
+	handle @tipsy-trails {
+		reverse_proxy tipsy-trails:3000
+	}
+
 	# Unbekannter Hostname -> 404
 	handle {
 		respond "Not found" 404

@@ -9,5 +9,6 @@ backup.log
 # (getrennte Git-Historie, gehoeren nicht ins Infrastruktur-Repo).
 /apps/winecashing/
 /apps/ginperium/
+/apps/tipsy-trails/
 /sites/main/
 admin.env
