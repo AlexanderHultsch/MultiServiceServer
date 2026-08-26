@@ -12,8 +12,10 @@
 #   bash scripts/deploy.sh            # normales Update
 #   bash scripts/deploy.sh --fresh    # zusaetzlich alle App-DBs zuruecksetzen
 #   bash scripts/deploy.sh --set-password   # Admin-Passwort neu setzen
+#      - Passwort wird nur hier ueberschrieben
+#      - rotate wird an npm run seed:admin uebergeben
 #
-# Manifest: sites.conf (name repo_url host admin).
+# Manifest: sites.conf (name repo_url host admin rotate).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -87,10 +89,10 @@ git pull --ff-only || echo "  WARN: kein Fast-Forward moeglich - bitte manuell p
 # als stdin, liest sie bis EOF leer - und die Schleife endet nach dem ersten
 # Eintrag. FD 3 allein genuegt aber nicht, siehe seed_site().
 process_sites() {  # $1 = callback-Funktionsname je Zeile
-  local cb="$1" name url host admin _rest
-  while read -r name url host admin _rest <&3; do
+  local cb="$1" name url host admin rotate _rest
+  while read -r name url host admin rotate _rest <&3; do
     [[ -z "${name}" || "${name}" == \#* ]] && continue
-    "${cb}" "${name}" "${url}" "${host}" "${admin}"
+    "${cb}" "${name}" "${url}" "${host}" "${admin}" "${rotate}"
   done 3< "${REPO_ROOT}/sites.conf"
 }
 
@@ -149,14 +151,20 @@ docker compose up -d --build
 # 5) Admin-Apps seeden                                               #
 # ------------------------------------------------------------------ #
 seed_site() {
-  local name="$1" _url="$2" _host="$3" admin="$4"
+  local name="$1" _url="$2" _host="$3" admin="$4" rotate="$5"
   [[ "${admin}" == "yes" ]] || return 0
-  echo "==> ${name}: Admin seeden (npm run seed:admin)"
+  local -a rotate_arg=()
+  if [[ "${SET_PW}" -eq 1 && -n "${rotate}" && "${rotate}" != "-" ]]; then
+    rotate_arg=(-- "${rotate}")
+    echo "==> ${name}: Admin seeden (npm run seed:admin, Passwort-Rotation)"
+  else
+    echo "==> ${name}: Admin seeden (npm run seed:admin)"
+  fi
   # "< /dev/null" ist Pflicht, nicht Kosmetik: "docker compose exec" haengt
   # stdin IMMER an den Container - "-T" schaltet nur das TTY ab, einen
   # stdin-Schalter gibt es nicht. Ohne die Umleitung leert der Aufruf die
   # Manifest-Datei (siehe process_sites) bzw. blockiert am Terminal-stdin.
-  docker compose exec -T "${name}" npm run seed:admin < /dev/null ||
+  docker compose exec -T "${name}" npm run seed:admin "${rotate_arg[@]}" < /dev/null ||
     echo "  WARN: seed:admin fehlgeschlagen"
 }
 process_sites seed_site
