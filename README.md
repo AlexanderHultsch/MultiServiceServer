@@ -871,7 +871,6 @@ bash scripts/deploy.sh --set-password # gemeinsames Admin-Passwort neu setzen
 | Alle Seiten aus `sites.conf` auf einmal aktualisieren, inkl. gemeinsamem Admin-Account und Caddy-Neustart | `deploy.sh` |
 | Eine Seite ist noch gar nicht geklont | `deploy.sh` (klont automatisch aus `sites.conf`) — oder manuell klonen, dann `deploy-site.sh` |
 
-
 ### E-Mail: `support@deine-domain.de` einrichten (Cloudflare Email Routing)
 
 E-Mail wird **nicht** auf dem Pi gehostet (ein Mailserver auf einem
