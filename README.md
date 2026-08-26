@@ -625,6 +625,8 @@ zum genauen Ablauf stehen in den Kommentaren von `scripts/backup.sh`.
 | `docker compose ps` zeigte vor einer Weile "running", Problem besteht aber weiter | Status kann veraltet sein — Container können zwischenzeitlich abgestürzt/neu gestartet sein | `docker compose ps` **live neu ausführen**, nicht auf einen älteren Blick verlassen, bevor man weiter nach der Ursache sucht |
 | DNS-Test von einem Test-Container auf demselben Docker-Bridge-Netz schlägt fehl, obwohl von echten LAN-Geräten aus alles funktioniert | Docker-NAT-"Hairpin"-Limitation: ein Container, der den eigenen host-published Port über die Bridge anspricht, kann daran scheitern — sieht wie ein Bug aus, ist aber eine bekannte Docker-Eigenheit | Zum Testen immer von einem echten LAN-Client oder direkt vom Host aus prüfen (`nslookup <domain> ${PI_STATIC_IP}`), nicht von einem anderen Container auf derselben Bridge |
 | Uptime-Kuma-Monitor für Pi-hole zeigt "timeout of Nms exceeded", obwohl `http://<PI_STATIC_IP>:8080/admin/` im Browser normal lädt | Dieselbe Docker-NAT-Hairpin-Limitation: Uptime Kuma ist selbst ein Container und scheitert daran, den eigenen host-published Port von Pi-hole über die LAN-IP anzusprechen | Monitor-URL auf `http://pihole/admin/` ändern (interner Servicename statt LAN-IP, siehe Schnellstart Schritt 12) |
+| Login einer App gelingt scheinbar, der Nutzer landet aber sofort wieder auf `/login` | `cloudflared` spricht Klartext-HTTP mit `caddy:80`, Caddy setzt daher `X-Forwarded-Proto: http`. Frameworks mit Secure-Cookies (z. B. `express-session` mit `cookie.secure=true` hinter `trust proxy`) verwerfen das Session-Cookie dann **stillschweigend** — kein Fehler im Log, nur ein `debug()`-Aufruf | Im `reverse_proxy`-Block der App `header_up X-Forwarded-Proto https` ergänzen (Vorlage im Kommentar über dem `@app`-Block in `config/caddy/Caddyfile`), dann `docker compose restart caddy` |
+| Nur die **erste** `admin: yes`-Seite aus `sites.conf` wird geseedet, alle weiteren fehlen | Bekannter, behobener Fehler in älteren Ständen von `scripts/deploy.sh`: `docker compose exec` hängt stdin immer an den Container (`-T` schaltet nur das TTY ab) und las im Schleifenkörper die offene `sites.conf` bis EOF leer | `git pull` — der Fix (`< /dev/null` am exec plus Manifest-Lesen über FD 3) ist enthalten. Fehlende Admins einmalig nachziehen: `docker compose exec -T <dienst> npm run seed:admin < /dev/null` |
 
 **Vorsicht beim Live-Debugging von DNS-Problemen:** keinen zweiten,
 unkonfigurierten Pi-hole-Testcontainer per `docker run --network host
@@ -823,6 +825,52 @@ danebengelegt):
 bash scripts/adopt-site-repo.sh sites/main https://github.com/<du>/meine-homepage.git
 git push   # den Commit, der sites/main jetzt ignoriert, nicht vergessen
 ```
+
+### Mehrere Seiten zentral verwalten (`sites.conf` + `deploy.sh`)
+
+`deploy-site.sh` aktualisiert **eine** bereits vorhandene Seite. Sobald mehrere
+eigene Websites nach dem Muster „ein Repo = ein Container" laufen (siehe oben),
+lohnt sich stattdessen `scripts/deploy.sh`: ein Manifest-getriebenes Skript,
+das **alle** in `sites.conf` eingetragenen Seiten in einem Rutsch klont/pullt,
+baut und startet.
+
+`sites.conf` im Repo-Wurzelverzeichnis (eine Zeile pro Seite):
+
+```
+# name    repo_url                                  host    admin
+shop      https://github.com/<du>/meine-shop-app.git shop    yes
+blog      https://github.com/<du>/mein-blog.git      blog    no
+```
+
+- `name` = Ordnername unter `apps/` **und** Service-Name in `docker-compose.yml`
+  (muss dort ebenfalls als Dienst eingetragen sein, siehe „Eine dynamische App
+  hinzufügen" oben — `sites.conf` allein reicht nicht).
+- `host` = Subdomain-Label, oder `apex` für die Hauptdomain selbst.
+- `admin` = `yes`, wenn die App einen Login braucht. `deploy.sh` fragt dann
+  einmalig nach einem **gemeinsamen** Admin-Benutzernamen/-Passwort (in
+  `admin.env`, gitignored, wird für alle `admin: yes`-Seiten wiederverwendet),
+  schreibt es zusammen mit einem zufälligen `SESSION_SECRET` in `apps/<name>/.env`
+  und führt anschließend `npm run seed:admin` im Container aus. Die jeweilige
+  App muss diese drei Variablen (`ADMIN_USER`, `ADMIN_PASSWORD`,
+  `SESSION_SECRET`) selbst konsumieren (z. B. per `express-session` +
+  eigenem `seed:admin`-Skript).
+
+Nutzung auf dem Pi:
+
+```bash
+bash scripts/deploy.sh                # normales Update aller Seiten
+bash scripts/deploy.sh --fresh        # zusaetzlich alle App-Datenbanken zuruecksetzen
+bash scripts/deploy.sh --set-password # gemeinsames Admin-Passwort neu setzen
+```
+
+**Wann welches Skript?**
+
+| Situation | Skript |
+|---|---|
+| Eine einzelne Seite schnell aktualisieren (kein Admin-Handling, kein Caddy-Neustart) | `deploy-site.sh <name>` |
+| Alle Seiten aus `sites.conf` auf einmal aktualisieren, inkl. gemeinsamem Admin-Account und Caddy-Neustart | `deploy.sh` |
+| Eine Seite ist noch gar nicht geklont | `deploy.sh` (klont automatisch aus `sites.conf`) — oder manuell klonen, dann `deploy-site.sh` |
+
 
 ### E-Mail: `support@deine-domain.de` einrichten (Cloudflare Email Routing)
 
@@ -1032,11 +1080,14 @@ pi-server/
 ├── config/
 │   └── caddy/
 │       └── Caddyfile            # Reverse-Proxy-Routing aller Seiten
+├── sites.conf                    # Manifest aller Seiten fuer scripts/deploy.sh
 ├── scripts/
 │   ├── setup-env.sh             # interaktiver .env-Assistent
 │   ├── 00-bootstrap.sh
 │   ├── 01-harden.sh
 │   ├── deploy-site.sh           # eine Seite aus ihrem Git-Repo aktualisieren
+│   ├── deploy.sh                # alle Seiten aus sites.conf klonen/bauen/starten + Admin-Accounts seeden
+│   ├── adopt-site-repo.sh       # mitgelieferten Seitenordner zu eigenem Git-Repo umbauen
 │   ├── install-backup-cron.sh   # idempotente Cron-Installation
 │   ├── backup.sh
 │   ├── verify.sh                # buendelt alle Verifikations-Checks
