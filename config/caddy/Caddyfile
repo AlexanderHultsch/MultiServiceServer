@@ -74,6 +74,17 @@
 		reverse_proxy tipsy-trails:3000
 	}
 
+	# --- Dishlist (dynamische App): dishlist.<DOMAIN> -> Container dishlist ---
+	# ACHTUNG: /r/* ist die bewusst OEFFENTLICHE Share-Seite - Bring! ruft diese
+	# URL von eigenen Servern mit einem Nicht-Browser-User-Agent ab. Landet
+	# dieser Host jemals hinter Cloudflare-Bot-Fighting oder einer Access-Regel,
+	# bricht jeder Bring!-Import lautlos, waehrend die Seite im Browser weiter
+	# ganz normal aussieht.
+	@dishlist host dishlist.{$DOMAIN}
+	handle @dishlist {
+		reverse_proxy dishlist:3000
+	}
+
 	# Unbekannter Hostname -> 404
 	handle {
 		respond "Not found" 404

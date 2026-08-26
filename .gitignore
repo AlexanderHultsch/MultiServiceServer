@@ -10,5 +10,6 @@ backup.log
 /apps/winecashing/
 /apps/ginperium/
 /apps/tipsy-trails/
+/apps/dishlist/
 /sites/main/
 admin.env
