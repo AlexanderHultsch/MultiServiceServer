@@ -62,8 +62,9 @@ if [[ ! -f "${ADMIN_ENV}" || "${SET_PW}" -eq 1 ]]; then
     else                      echo "  Staerke: gut (${len} Zeichen)."; fi
     break
   done
-  umask 077
-  { echo "ADMIN_USER=${AU}"; echo "ADMIN_PASSWORD=${AP}"; } > "${ADMIN_ENV}"
+  # umask NUR in der Subshell setzen - sonst wirkt 077 im weiteren Skript
+  # fort und alle danach geklonten Repos bekaemen Modus 600/700.
+  ( umask 077; { echo "ADMIN_USER=${AU}"; echo "ADMIN_PASSWORD=${AP}"; } > "${ADMIN_ENV}" )
   chmod 600 "${ADMIN_ENV}"
   echo "-> admin.env gespeichert (gitignored)."
 else
@@ -81,12 +82,16 @@ git pull --ff-only || echo "  WARN: kein Fast-Forward moeglich - bitte manuell p
 # ------------------------------------------------------------------ #
 # 3) Website-Repos klonen/pullen + Admin-.env schreiben              #
 # ------------------------------------------------------------------ #
+# Das Manifest wird bewusst auf FD 3 gelesen, NICHT auf stdin: ein Kommando im
+# Schleifenkoerper (z.B. "docker compose exec") erbt sonst dieselbe offene Datei
+# als stdin, liest sie bis EOF leer - und die Schleife endet nach dem ersten
+# Eintrag. FD 3 allein genuegt aber nicht, siehe seed_site().
 process_sites() {  # $1 = callback-Funktionsname je Zeile
   local cb="$1" name url host admin _rest
-  while read -r name url host admin _rest; do
+  while read -r name url host admin _rest <&3; do
     [[ -z "${name}" || "${name}" == \#* ]] && continue
     "${cb}" "${name}" "${url}" "${host}" "${admin}"
-  done < "${REPO_ROOT}/sites.conf"
+  done 3< "${REPO_ROOT}/sites.conf"
 }
 
 prepare_site() {
@@ -112,13 +117,18 @@ prepare_site() {
     local envf="${dir}/.env" sec=""
     [[ -f "${envf}" ]] && sec="$(grep -E '^SESSION_SECRET=' "${envf}" 2>/dev/null | cut -d= -f2- || true)"
     [[ -n "${sec}" ]] || sec="$(rand_secret)"
-    umask 077
-    {
-      echo "SESSION_SECRET=${sec}"
-      echo "ADMIN_USER=${ADMIN_USER}"
-      echo "ADMIN_PASSWORD=${ADMIN_PASSWORD}"
-    } > "${envf}"
-    echo "  .env geschrieben (Admin-Zugang gesetzt)"
+    ( umask 077
+      {
+        echo "SESSION_SECRET=${sec}"
+        echo "ADMIN_USER=${ADMIN_USER}"
+        echo "ADMIN_PASSWORD=${ADMIN_PASSWORD}"
+      } > "${envf}" )
+    # Zwingend ZUSAETZLICH zur umask: ">" auf eine BEREITS BESTEHENDE Datei
+    # behaelt deren alten Modus bei, umask greift nur beim Neuanlegen. Ohne
+    # dieses chmod bleibt eine einmal zu offen angelegte .env dauerhaft offen -
+    # sie enthaelt SESSION_SECRET und das gemeinsame ADMIN_PASSWORD.
+    chmod 600 "${envf}"
+    echo "  .env geschrieben (Admin-Zugang gesetzt, Modus 600)"
   fi
 
   # DB/Volume optional zuruecksetzen
@@ -142,7 +152,12 @@ seed_site() {
   local name="$1" _url="$2" _host="$3" admin="$4"
   [[ "${admin}" == "yes" ]] || return 0
   echo "==> ${name}: Admin seeden (npm run seed:admin)"
-  docker compose exec -T "${name}" npm run seed:admin || echo "  WARN: seed:admin fehlgeschlagen"
+  # "< /dev/null" ist Pflicht, nicht Kosmetik: "docker compose exec" haengt
+  # stdin IMMER an den Container - "-T" schaltet nur das TTY ab, einen
+  # stdin-Schalter gibt es nicht. Ohne die Umleitung leert der Aufruf die
+  # Manifest-Datei (siehe process_sites) bzw. blockiert am Terminal-stdin.
+  docker compose exec -T "${name}" npm run seed:admin < /dev/null ||
+    echo "  WARN: seed:admin fehlgeschlagen"
 }
 process_sites seed_site
 
