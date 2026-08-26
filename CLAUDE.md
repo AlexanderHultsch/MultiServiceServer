@@ -1,15 +1,31 @@
 # CLAUDE.md — Arbeitsanweisung für Claude Code
 
 ## Kontext
-Dieses Repo setzt die Spezifikation in `raspberry-pi-4-spezifikation.md` um.
-Diese SPEC ist die **maßgebliche Quelle der Wahrheit**. Lies sie vollständig, bevor du handelst.
-Ziel: sicherer Multi-Service-Server (Pi-hole, statischer Webserver, Cloudflare Tunnel, Uptime Kuma) auf einem Raspberry Pi 4.
+Ziel: sicherer Multi-Service-Server (Pi-hole, Caddy als Reverse Proxy,
+Cloudflare Tunnel, Uptime Kuma, eigene App-Container) auf einem Raspberry Pi 4.
 
-Diese Datei gilt sowohl für den **initialen Aufbau** des Repos als auch für
-**spätere Debugging-/Wartungs-Sitzungen**, die direkt auf dem Pi selbst
-gestartet werden (`claude` im Projektordner, siehe README Abschnitt "Claude
-Code direkt auf dem Pi" bzw. SPEC Abschnitt 5.6). In beiden Fällen gelten
-dieselben Regeln.
+Der Aufbau ist **abgeschlossen** — der Server läuft produktiv. Diese Datei gilt
+vor allem für **Debugging-/Wartungs-Sitzungen**, die direkt auf dem Pi gestartet
+werden (`claude` im Projektordner, siehe README "Claude Code direkt auf dem Pi").
+
+`raspberry-pi-4-spezifikation.md` ist die maßgebliche Quelle für Architektur und
+Constraints. **Lies sie nicht pauschal komplett** — das sind ~6.000 Token, die
+meist nichts zur Aufgabe beitragen:
+- **Debugging/Wartung:** diese Datei + der passende README-Abschnitt (Tabelle
+  unten) genügen. SPEC nur bei konkretem Bedarf.
+- **Architekturänderung** (neuer Dienst, Netz-/Port-/Backup-Umbau): vorher SPEC
+  Abschnitt 2 (Zielarchitektur), 3 (Constraints), 5 (Dienste) und 8 (Backup) lesen.
+- Abschnitte 0, 4, 6, 7, 9 und 10 beschreiben den **Bauvorgang** und sind
+  vollständig umgesetzt — reine Historie, nur für Rückfragen zur Herkunft.
+
+## Wo steht was (README, ~1.100 Zeilen — gezielt greppen statt komplett lesen)
+| Thema | README-Abschnitt |
+|---|---|
+| Fehlersuche, bekannte Fallen | `## Troubleshooting` |
+| Neue Website/App anbinden | `## Weitere Websites hosten` |
+| Erstinstallation des Pi | `## Schnellstart (Copy & Paste)` |
+| Image-Versionen, `.env`-Herkunft | `## Referenz: ...` |
+| Claude-CLI auf dem Pi | `## Claude Code direkt auf dem Pi` |
 
 ## Umgebung
 - Läuft auf dem Raspberry Pi 4 (Raspberry Pi OS Lite, 64-bit, headless).
@@ -18,11 +34,10 @@ dieselben Regeln.
 - `sudo` verfügbar; sparsam und nur wie in den Skripten vorgesehen einsetzen.
 
 ## Closed-Loop-Arbeitsweise (verbindlich)
-Arbeite die Umsetzungstabelle (SPEC Abschnitt 9) **Schritt für Schritt** ab.
-Für JEDEN Schritt:
-1. Umsetzen (Datei/Skript erzeugen oder Befehl ausführen).
+Jede Änderung **Schritt für Schritt**, nie mehrere ungeprüft hintereinander:
+1. Umsetzen (Datei/Skript ändern oder Befehl ausführen).
 2. Mit einem konkreten Check verifizieren.
-3. Erst weitergehen, wenn die Definition of Done erfüllt ist. Bei Fehler: Ausgabe lesen, Ursache beheben, erneut prüfen.
+3. Erst weitergehen, wenn der Check bestanden ist. Bei Fehler: Ausgabe lesen, Ursache beheben, erneut prüfen.
 
 Verifikations-Checks (auch gebündelt über `bash scripts/verify.sh`):
 - Compose gültig: `docker compose config`
@@ -32,12 +47,22 @@ Verifikations-Checks (auch gebündelt über `bash scripts/verify.sh`):
 - Keine Secrets im Git: `git ls-files | grep -E '(^|/)\.env$|^data/'` muss leer sein
 
 ## Harte Regeln (SPEC Abschnitt 3 — NIEMALS verletzen)
-- Kein `:latest`; alle Images auf konkrete Version pinnen (Tag in README notieren).
-- `.env`, `data/`, Backup-Artefakte (`*.tar.gz`, `*.age`) NIE committen.
-- Keine eingehenden Ports öffnen; `web` bekommt KEINEN `ports:`-Eintrag.
-- Admin-UIs (`pihole`, `uptime-kuma`) nur an `${PI_STATIC_IP}` binden.
-- SSH key-only; kein Passwort-Login, kein Root-Login.
-- Vor Abschluss: Backup-Restore einmal real testen.
+Diese Liste ist **vollständig**; sie ersetzt das Nachschlagen von SPEC Abschnitt 3.
+- [N2] Kein `:latest`; alle Images auf konkrete Version pinnen (Tag in README notieren).
+- [N3] `.env`, `data/`, Backup-Artefakte (`*.tar.gz`, `*.age`) NIE committen.
+- [N1]/[M8] Keine eingehende Portfreigabe am Router. `caddy` und **alle
+  App-Container** bekommen KEINEN `ports:`-Eintrag — sie sind ausschließlich
+  über `cloudflared` im internen Docker-Netz erreichbar. (Der frühere
+  nginx-Dienst `web` existiert seit v2.4 nicht mehr.)
+- [N4] Keinen Dienst an `0.0.0.0` binden, außer implizit über den Tunnel.
+- [M3] Admin-UIs (`pihole`, `uptime-kuma`) nur an `${PI_STATIC_IP}` binden.
+- [M4] `ufw` Default-Deny eingehend; Admin-Ports und SSH nur aus `${LAN_SUBNET}`.
+- [M5] Secrets ausschließlich in `.env` (gitignored) plus verschlüsselte Kopie
+  im Backup-Remote. App-Secrets (`SESSION_SECRET`, `ADMIN_*`) liegen in
+  `apps/<name>/.env`, geschrieben von `scripts/deploy.sh`, Modus 600.
+- [M6] SSH key-only; kein Passwort-Login, kein Root-Login.
+- [M1] Jeder Container: `restart: unless-stopped`.
+- [M7] Backup-Restore muss real getestet sein/bleiben.
 - Läuft eine Claude Code CLI auf dem Pi (SPEC 5.6): niemals als
   Hintergrunddienst/Autostart einrichten (kein systemd-Unit, kein Cronjob) —
   nur On-Demand-Aufruf.

@@ -418,7 +418,7 @@ abgeschlossen gilt.
 | 2 | `00-bootstrap.sh` | Docker, git & Pakete installiert, Skript idempotent |
 | 3 | `01-harden.sh` | SSH key-only; `ufw status` = Default-Deny + nur LAN-Regeln |
 | 4 | `pihole` | Web-UI nur unter `${PI_STATIC_IP}:${PORT_PIHOLE_UI}`; DNS filtert im LAN |
-| 5 | `web` + `cloudflared` | `${DOMAIN}` öffentlich per HTTPS erreichbar; `web` hat keinen Host-Port |
+| 5 | `caddy` + `cloudflared` | `${DOMAIN}` öffentlich per HTTPS erreichbar; `caddy` hat keinen Host-Port (bis v2.3 hieß dieser Dienst `web`/nginx, siehe 5.2) |
 | 6 | `uptime-kuma` | UI nur im LAN; Checks für web/pihole/Internet aktiv |
 | 7 | `backup.sh` + Cron | Backup landet verschlüsselt im Remote; Rotation greift |
 | 8 | **Restore-Test** | Kompletter Restore auf leerem System erfolgreich ([M7]) |
