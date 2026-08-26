@@ -498,7 +498,7 @@ den WLAN-Netzwerkdetails.
 curl -I https://deine-domain.de   # <- eigene Domain aus .env einsetzen
 ```
 
-Erwartet: `HTTP/2 200`. `web` selbst hat **keinen** Host-Port — die einzige
+Erwartet: `HTTP/2 200`. `caddy` selbst hat **keinen** Host-Port — die einzige
 Route dorthin führt über `cloudflared`.
 
 ### 12. Uptime Kuma einrichten
