@@ -734,6 +734,46 @@ Es gibt zwei Arten von Seiten:
    ```
 5. Public Hostname im Cloudflare-Dashboard + Uptime-Kuma-Monitor wie oben.
 
+### Dishlist (bereits verdrahtet): `dishlist.deine-domain.de`
+
+**Dishlist** ist ein privates digitales Kochbuch (eigenes Repo, Node +
+SQLite) und läuft als vierte dynamische App neben winecashing, ginperium und
+tipsy-trails. Die Verdrahtung (Dienst in `docker-compose.yml`, Block in
+`config/caddy/Caddyfile`, Eintrag in `sites.conf`) ist bereits erledigt —
+hier nur die Punkte, die vor dem **ersten** Deploy zusätzlich zu beachten sind:
+
+- **Einmalig vor dem ersten Deploy:** Datenverzeichnis anlegen und dem
+  Container-Nutzer übergeben:
+  ```bash
+  mkdir -p ~/pi-server/data/dishlist && sudo chown -R 1000:1000 ~/pi-server/data/dishlist
+  ```
+  Grund: der Bind-Mount `./data/dishlist:/data` überdeckt, was das Image beim
+  Bau vorbereitet hat; legt Docker das Verzeichnis selbst an (weil es vorher
+  nicht existiert), gehört es `root`. Dishlist läuft aber unprivilegiert als
+  `node`-Nutzer (UID 1000) und könnte dann seine SQLite-Datenbank nicht
+  anlegen. Bei den anderen Apps besteht dieses Problem nicht in derselben
+  Form, siehe deren jeweilige Dockerfiles.
+- **`PUBLIC_BASE_URL` steht in `docker-compose.yml`**, nicht in
+  `apps/dishlist/.env` — `prepare_site()` in `scripts/deploy.sh` schreibt
+  diese `.env`-Datei bei **jedem** Deploy komplett neu (nur
+  `SESSION_SECRET`/`ADMIN_USER`/`ADMIN_PASSWORD`); ein von Hand ergänztes
+  `PUBLIC_BASE_URL` dort würde beim nächsten Deploy stillschweigend wieder
+  verschwinden und der Container würde danach nicht mehr starten (Dishlist
+  bricht ohne diese Variable beim Start hart ab).
+- **Cloudflare-Vorsicht bei `/r/*`:** Diese Route ist die bewusst öffentliche
+  Rezept-Freigabeseite — Bring! ruft sie von eigenen Servern mit einem
+  Nicht-Browser-User-Agent ab. Landet `dishlist.deine-domain.de` jemals hinter
+  Cloudflare-Bot-Fighting oder einer Access-Regel, bricht jeder Bring!-Import
+  lautlos, während die Seite im Browser weiterhin ganz normal aussieht.
+- **Uptime Kuma:** einen Monitor auf `https://dishlist.deine-domain.de/healthz`
+  anlegen (wie in „Weitere Websites hosten" oben beschrieben).
+- **Backup:** `data/dishlist/` wird vom nächtlichen Backup bereits
+  mitgesichert — `scripts/backup.sh` packt pauschal das gesamte `data/`-
+  Verzeichnis (`tar ... data .env`), ohne einzelne Unterordner aufzuzählen.
+- **Ausrollen:** `bash scripts/deploy.sh` klont/pullt Dishlist, schreibt die
+  Admin-`.env`, baut den Container, führt `npm run seed:admin` aus und lädt
+  Caddy neu — wie bei den anderen Admin-Apps.
+
 ### Jede Seite als eigenes Git-Repo (empfohlen für unabhängige Versionierung)
 
 Standardmäßig liegen die Beispielseiten **im** Haupt-Repo. Für eine echte

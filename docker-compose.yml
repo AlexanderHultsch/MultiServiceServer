@@ -98,6 +98,45 @@ services:
     networks: [edge]
     # KEIN ports: - nur intern ueber caddy erreichbar
 
+  # Dishlist - dynamische App (eigenes Repo, hineingeklont nach apps/dishlist/).
+  # Caddy leitet dishlist.${DOMAIN} hierher (siehe Caddyfile). Node + SQLite,
+  # privates digitales Kochbuch. Hat (wie winecashing/ginperium/tipsy-trails)
+  # einen Admin-Login -> braucht SESSION_SECRET/ADMIN_* aus der .env, die
+  # scripts/deploy.sh schreibt. Persistenz unter data/dishlist/ -> wandert
+  # automatisch ins naechtliche Backup.
+  #
+  # Haertung nach Dishlist-eigener SPEC Abschnitt 11 (bei den Geschwister-Apps
+  # bisher nicht angewendet - hier bewusst nur fuer diesen Dienst):
+  # read-only Root-Dateisystem, /tmp als tmpfs, keine zusaetzlichen Privilegien.
+  dishlist:
+    build: ./apps/dishlist
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+    environment:
+      PORT: "3000"
+      DB_PATH: /data/dishlist.db
+      UPLOAD_DIR: /data/uploads
+      PUBLIC_BASE_URL: https://dishlist.${DOMAIN}
+      # npm run seed:admin laeuft (siehe deploy.sh) INNERHALB des Containers;
+      # bei read_only: true braucht npm dafuer einen beschreibbaren Cache
+      # ausserhalb des read-only Root-Dateisystems.
+      NPM_CONFIG_CACHE: /tmp/.npm
+    # env_file OPTIONAL (Long-Form, Compose >= 2.24) statt wie bei den
+    # Geschwister-Apps zwingend: diese Datei entsteht erst, nachdem
+    # scripts/deploy.sh apps/dishlist/ geklont hat. Waere sie zwingend, wuerde
+    # ein fehlender/fehlgeschlagener Dishlist-Klon das GESAMTE
+    # docker-compose.yml ungueltig machen - dann wuerde nicht einmal Pi-hole
+    # starten und das ganze LAN haette kein DNS mehr.
+    env_file:
+      - path: ./apps/dishlist/.env
+        required: false
+    volumes:
+      - ./data/dishlist:/data
+    networks: [edge]
+    # KEIN ports: - nur intern ueber caddy erreichbar
+
   cloudflared:
     image: cloudflare/cloudflared:2026.7.0
     restart: unless-stopped
