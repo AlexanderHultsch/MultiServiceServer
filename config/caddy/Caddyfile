@@ -51,6 +51,20 @@
 	}
 
 	# --- Beispiel dynamische App: app.<DOMAIN> -> Container app-example ---
+	#
+	# WICHTIG fuer Apps mit Login/Sessions: cloudflared spricht Klartext-HTTP
+	# mit caddy:80, also setzt Caddy von sich aus "X-Forwarded-Proto: http".
+	# Frameworks mit Secure-Cookies (z.B. express-session mit
+	# cookie.secure=true hinter "trust proxy") verweigern das Session-Cookie
+	# dann STILLSCHWEIGEND - der Login gelingt scheinbar, das Cookie fehlt,
+	# der Nutzer landet wieder auf /login. Nach aussen ist das Schema immer
+	# https (Cloudflare terminiert TLS), also den Header entsprechend setzen:
+	#
+	#	reverse_proxy <dienst>:3000 {
+	#		header_up X-Forwarded-Proto https
+	#	}
+	#
+	# app-example hat keine Sessions und braucht das nicht.
 	@app host app.{$DOMAIN}
 	handle @app {
 		reverse_proxy app-example:3000
