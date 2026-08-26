@@ -82,7 +82,15 @@
 	# ganz normal aussieht.
 	@dishlist host dishlist.{$DOMAIN}
 	handle @dishlist {
-		reverse_proxy dishlist:3000
+		# cloudflared spricht Klartext-HTTP mit caddy:80, also setzt Caddy von
+		# sich aus X-Forwarded-Proto: http. Express-session verweigert dann
+		# stillschweigend das Secure-Session-Cookie (nur ein debug()-Aufruf,
+		# keine Fehlermeldung): der Login gelingt, das Cookie fehlt, der
+		# Nutzer landet wieder auf /login. Nach aussen ist das Schema immer
+		# https - Cloudflare terminiert TLS -, also sagen wir das auch so.
+		reverse_proxy dishlist:3000 {
+			header_up X-Forwarded-Proto https
+		}
 	}
 
 	# Unbekannter Hostname -> 404
