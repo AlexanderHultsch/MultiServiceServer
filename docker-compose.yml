@@ -98,25 +98,25 @@ services:
     networks: [edge]
     # KEIN ports: - nur intern ueber caddy erreichbar
 
-  # Dishlist - dynamische App (eigenes Repo, hineingeklont nach apps/dishlist/).
+  # Bring2Bring! - dynamische App (eigenes Repo, hineingeklont nach apps/bring2bring/).
   # Caddy leitet dishlist.${DOMAIN} hierher (siehe Caddyfile). Node + SQLite,
   # privates digitales Kochbuch. Hat (wie winecashing/ginperium/tipsy-trails)
   # einen Admin-Login -> braucht SESSION_SECRET/ADMIN_* aus der .env, die
-  # scripts/deploy.sh schreibt. Persistenz unter data/dishlist/ -> wandert
+  # scripts/deploy.sh schreibt. Persistenz unter data/bring2bring/ -> wandert
   # automatisch ins naechtliche Backup.
   #
-  # Haertung nach Dishlist-eigener SPEC Abschnitt 11 (bei den Geschwister-Apps
+  # Haertung nach Bring2Bring!-eigener SPEC Abschnitt 11 (bei den Geschwister-Apps
   # bisher nicht angewendet - hier bewusst nur fuer diesen Dienst):
   # read-only Root-Dateisystem, /tmp als tmpfs, keine zusaetzlichen Privilegien.
-  dishlist:
-    build: ./apps/dishlist
+  bring2bring:
+    build: ./apps/bring2bring
     restart: unless-stopped
     read_only: true
     tmpfs: [/tmp]
     security_opt: [no-new-privileges:true]
     environment:
       PORT: "3000"
-      DB_PATH: /data/dishlist.db
+      DB_PATH: /data/bring2bring.db
       UPLOAD_DIR: /data/uploads
       PUBLIC_BASE_URL: https://dishlist.${DOMAIN}
       # npm run seed:admin laeuft (siehe deploy.sh) INNERHALB des Containers;
@@ -125,15 +125,15 @@ services:
       NPM_CONFIG_CACHE: /tmp/.npm
     # env_file OPTIONAL (Long-Form, Compose >= 2.24) statt wie bei den
     # Geschwister-Apps zwingend: diese Datei entsteht erst, nachdem
-    # scripts/deploy.sh apps/dishlist/ geklont hat. Waere sie zwingend, wuerde
-    # ein fehlender/fehlgeschlagener Dishlist-Klon das GESAMTE
+    # scripts/deploy.sh apps/bring2bring/ geklont hat. Waere sie zwingend, wuerde
+    # ein fehlender/fehlgeschlagener Bring2Bring!-Klon das GESAMTE
     # docker-compose.yml ungueltig machen - dann wuerde nicht einmal Pi-hole
     # starten und das ganze LAN haette kein DNS mehr.
     env_file:
-      - path: ./apps/dishlist/.env
+      - path: ./apps/bring2bring/.env
         required: false
     volumes:
-      - ./data/dishlist:/data
+      - ./data/bring2bring:/data
     networks: [edge]
     # KEIN ports: - nur intern ueber caddy erreichbar
 
