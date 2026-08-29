@@ -74,7 +74,7 @@
 		reverse_proxy tipsy-trails:3000
 	}
 
-	# --- Bring2Bring! (dynamische App): dishlist.<DOMAIN> -> Container bring2bring ---
+	# --- Bring2Bring! (dynamische App): bring2bring.<DOMAIN> / dishlist.<DOMAIN> -> Container bring2bring ---
 	# ACHTUNG: /r/* ist die bewusst OEFFENTLICHE Share-Seite - Bring! ruft diese
 	# URL von eigenen Servern mit einem Nicht-Browser-User-Agent ab. Landet
 	# dieser Host jemals hinter Cloudflare-Bot-Fighting oder einer Access-Regel,

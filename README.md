@@ -736,7 +736,7 @@ Es gibt zwei Arten von Seiten:
    ```
 5. Public Hostname im Cloudflare-Dashboard + Uptime-Kuma-Monitor wie oben.
 
-### Bring2Bring! (bereits verdrahtet): `dishlist.deine-domain.de`
+### Bring2Bring! (bereits verdrahtet): `bring2bring.deine-domain.de` (Alias: `dishlist.deine-domain.de`)
 
 **Bring2Bring!** ist ein privates digitales Kochbuch (eigenes Repo, Node +
 SQLite) und läuft als vierte dynamische App neben winecashing, ginperium und
@@ -764,10 +764,11 @@ hier nur die Punkte, die vor dem **ersten** Deploy zusätzlich zu beachten sind:
   bricht ohne diese Variable beim Start hart ab).
 - **Cloudflare-Vorsicht bei `/r/*`:** Diese Route ist die bewusst öffentliche
   Rezept-Freigabeseite — Bring! ruft sie von eigenen Servern mit einem
-  Nicht-Browser-User-Agent ab. Landet `dishlist.deine-domain.de` jemals hinter
-  Cloudflare-Bot-Fighting oder einer Access-Regel, bricht jeder Bring!-Import
-  lautlos, während die Seite im Browser weiterhin ganz normal aussieht.
-- **Uptime Kuma:** einen Monitor auf `https://dishlist.deine-domain.de/healthz`
+  Nicht-Browser-User-Agent ab. Landet `bring2bring.deine-domain.de` oder
+  `dishlist.deine-domain.de` jemals hinter Cloudflare-Bot-Fighting oder einer
+  Access-Regel, bricht jeder Bring!-Import lautlos, während die Seite im
+  Browser weiterhin ganz normal aussieht.
+- **Uptime Kuma:** einen Monitor auf `https://bring2bring.deine-domain.de/healthz`
   anlegen (wie in „Weitere Websites hosten" oben beschrieben).
 - **Backup:** `data/bring2bring/` wird vom nächtlichen Backup bereits
   mitgesichert — `scripts/backup.sh` packt pauschal das gesamte `data/`-
