@@ -99,8 +99,7 @@ services:
     # KEIN ports: - nur intern ueber caddy erreichbar
 
   # Bring2Bring! - dynamische App (eigenes Repo, hineingeklont nach apps/bring2bring/).
-  # Caddy leitet bring2bring.${DOMAIN} (und uebergangsweise dishlist.${DOMAIN},
-  # siehe Caddyfile) hierher. Node + SQLite,
+  # Caddy leitet bring2bring.${DOMAIN} hierher (siehe Caddyfile). Node + SQLite,
   # privates digitales Kochbuch. Hat (wie winecashing/ginperium/tipsy-trails)
   # einen Admin-Login -> braucht SESSION_SECRET/ADMIN_* aus der .env, die
   # scripts/deploy.sh schreibt. Persistenz unter data/bring2bring/ -> wandert

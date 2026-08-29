@@ -74,19 +74,13 @@
 		reverse_proxy tipsy-trails:3000
 	}
 
-	# --- Bring2Bring! (dynamische App): bring2bring.<DOMAIN> / dishlist.<DOMAIN> -> Container bring2bring ---
+	# --- Bring2Bring! (dynamische App): bring2bring.<DOMAIN> -> Container bring2bring ---
 	# ACHTUNG: /r/* ist die bewusst OEFFENTLICHE Share-Seite - Bring! ruft diese
 	# URL von eigenen Servern mit einem Nicht-Browser-User-Agent ab. Landet
 	# dieser Host jemals hinter Cloudflare-Bot-Fighting oder einer Access-Regel,
 	# bricht jeder Bring!-Import lautlos, waehrend die Seite im Browser weiter
 	# ganz normal aussieht.
-	# Uebergangsphase: Cloudflare-Tunnel wurde auf bring2bring.<DOMAIN>
-	# umbenannt, aber dishlist.<DOMAIN> muss weiter antworten - Bring! hat
-	# schon Share-Links (/r/<token>) auf diesen Host gespeichert und ruft sie
-	# von seinen eigenen Servern ab. Faellt der alte Name hier raus, brechen
-	# diese Importe lautlos, waehrend die Seite im Browser weiter normal
-	# aussieht.
-	@bring2bring host bring2bring.{$DOMAIN} dishlist.{$DOMAIN}
+	@bring2bring host bring2bring.{$DOMAIN}
 	handle @bring2bring {
 		# cloudflared spricht Klartext-HTTP mit caddy:80, also setzt Caddy von
 		# sich aus X-Forwarded-Proto: http. Express-session verweigert dann
