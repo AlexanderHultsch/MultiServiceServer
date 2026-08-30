@@ -6,7 +6,7 @@ Cloudflare Tunnel, Uptime Kuma, own app containers) on a Raspberry Pi 4.
 
 The build is **complete** - the server runs in production. This file applies
 mainly to **debugging/maintenance sessions** started directly on the Pi
-(`claude` in the project folder, see README "Claude Code direkt auf dem Pi").
+(`claude` in the project folder, see README "Claude Code Directly on the Pi").
 
 `raspberry-pi-4-spezifikation.md` is the authoritative source for architecture
 and constraints. **Do not read it in full by default** - that is about 6,000
@@ -23,10 +23,10 @@ tokens which usually contribute nothing to the task at hand:
 | Topic | README section |
 |---|---|
 | Troubleshooting, known pitfalls | `## Troubleshooting` |
-| Connecting a new website/app | `## Weitere Websites hosten` |
-| Initial setup of the Pi | `## Schnellstart (Copy & Paste)` |
-| Image versions, `.env` origin | `## Referenz: ...` |
-| Claude CLI on the Pi | `## Claude Code direkt auf dem Pi` |
+| Connecting a new website/app | `## Hosting Additional Websites` |
+| Initial setup of the Pi | `## Quick Start (Copy & Paste)` |
+| Image versions, `.env` origin | `## Reference:` |
+| Claude CLI on the Pi | `## Claude Code Directly on the Pi` |
 
 ## Environment
 - Runs on the Raspberry Pi 4 (Raspberry Pi OS Lite, 64-bit, headless).
