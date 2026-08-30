@@ -4,14 +4,14 @@ services:
     restart: unless-stopped
     environment:
       TZ: ${TZ}
-      # Pi-hole v6: Passwort-Env-Name gegen docs.pi-hole.net/docker/configuration verifiziert
+      # Pi-hole v6: password env name verified against docs.pi-hole.net/docker/configuration
       FTLCONF_webserver_api_password: ${PIHOLE_PASSWORD}
       FTLCONF_dns_upstreams: "9.9.9.9;1.1.1.1"
-      # Ohne dies default Pi-hole v6 auf dns.listeningMode=LOCAL: es vertraut dann nur
-      # Anfragen aus dem eigenen Docker-Bridge-Subnetz und verwirft echte LAN-Clients
-      # stillschweigend als "non-local" (sichtbar im Log als "ignoring query from
-      # non-local network ..."). "ALL" ist hier sicher, weil Port 53 laut [M3]/[N4]
-      # ohnehin nur an ${PI_STATIC_IP} gebunden ist, nicht an 0.0.0.0.
+      # Without this, Pi-hole v6 defaults to dns.listeningMode=LOCAL: it then only trusts
+      # requests from its own Docker bridge subnet and silently drops real LAN clients
+      # as "non-local" (visible in the log as "ignoring query from
+      # non-local network ..."). "ALL" is safe here because port 53 is, per [M3]/[N4],
+      # bound only to ${PI_STATIC_IP} anyway, not to 0.0.0.0.
       FTLCONF_dns_listeningMode: "ALL"
     ports:
       - "${PI_STATIC_IP}:${PORT_DNS}:53/tcp"
@@ -21,32 +21,32 @@ services:
       - ./data/pihole/etc-pihole:/etc/pihole
     networks: [lan_net]
 
-  # Reverse Proxy & Webserver fuer ALLE Websites (statisch + dynamisch).
-  # cloudflared schickt jeden Hostnamen an caddy:80; Caddy verteilt anhand der
-  # Subdomain (Routing in config/caddy/Caddyfile). Ersetzt den frueheren
-  # nginx-"web"-Dienst.
+  # Reverse proxy & web server for ALL websites (static + dynamic).
+  # cloudflared forwards every hostname to caddy:80; Caddy distributes based on
+  # the subdomain (routing in config/caddy/Caddyfile). Replaces the former
+  # nginx "web" service.
   caddy:
     image: caddy:2.11.4-alpine
     restart: unless-stopped
     environment:
-      # Wird im Caddyfile als {$DOMAIN} eingesetzt (Textersetzung beim Einlesen).
+      # Used in the Caddyfile as {$DOMAIN} (text substitution on read-in).
       DOMAIN: ${DOMAIN}
     volumes:
       - ./config/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - ./sites:/srv:ro                 # statische Seiten (read-only)
-      - ./data/caddy/data:/data         # Caddy-Laufzeitdaten
+      - ./sites:/srv:ro                 # static sites (read-only)
+      - ./data/caddy/data:/data         # Caddy runtime data
       - ./data/caddy/config:/config
     networks: [edge]
-    # KEIN ports: (Constraint M8) - nur ueber cloudflared erreichbar
+    # NO ports: (constraint M8) - reachable only via cloudflared
 
-  # Beispiel fuer eine DYNAMISCHE App (eigener Container, eigenes Git-Repo).
-  # Winzige Node-App ohne Abhaengigkeiten - spaeter durch die echte App ersetzen.
-  # Caddy leitet app.${DOMAIN} hierher weiter (siehe Caddyfile).
+  # Example of a DYNAMIC app (own container, own git repo).
+  # Tiny Node app with no dependencies - replace with the real app later.
+  # Caddy forwards app.${DOMAIN} here (see Caddyfile).
   app-example:
     build: ./apps/app-example
     restart: unless-stopped
     networks: [edge]
-    # KEIN ports: - nur intern ueber caddy erreichbar
+    # NO ports: - reachable only internally via caddy
 
   cloudflared:
     image: cloudflare/cloudflared:2026.7.0

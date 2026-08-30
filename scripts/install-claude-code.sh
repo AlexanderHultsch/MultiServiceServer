@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Installiert die Claude Code CLI fuer On-Demand-Debugging direkt auf dem Pi.
-# Richtet KEINEN Hintergrunddienst ein - die CLI wird nur bei Bedarf manuell
-# mit 'claude' aufgerufen (siehe README "Claude Code direkt auf dem Pi").
+# Installs the Claude Code CLI for on-demand debugging directly on the Pi.
+# Sets up NO background service - the CLI is only invoked manually when needed
+# with 'claude' (see README "Claude Code direkt auf dem Pi").
 set -euo pipefail
 
 NEED_NODE=1
@@ -13,39 +13,39 @@ if command -v node >/dev/null 2>&1; then
 fi
 
 if [[ "${NEED_NODE}" -eq 1 ]]; then
-  echo "==> Node.js (LTS) installieren (Voraussetzung fuer die Claude Code CLI)"
+  echo "==> Installing Node.js (LTS) (required for the Claude Code CLI)"
   curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo bash -
   sudo apt install -y nodejs
 else
-  echo "==> Node.js $(node --version) bereits ausreichend, ueberspringe Installation"
+  echo "==> Node.js $(node --version) already sufficient, skipping install"
 fi
 
-echo "==> Claude Code CLI installieren (per npm)"
-# Bewusst npm statt nativem Installer (curl -fsSL https://claude.ai/install.sh | bash):
-# der native Installer hat auf ARM64/Raspberry Pi bekannte Probleme (meldet Erfolg,
-# installiert die Binary aber nicht mit) - siehe README fuer Details/Quelle.
+echo "==> Installing Claude Code CLI (via npm)"
+# Deliberately npm instead of the native installer (curl -fsSL https://claude.ai/install.sh | bash):
+# the native installer has known issues on ARM64/Raspberry Pi (reports success but
+# does not actually install the binary) - see README for details/source.
 sudo npm install -g @anthropic-ai/claude-code
 
 echo
 echo "=================================================================="
-echo "Installation abgeschlossen. Es laeuft kein Hintergrunddienst -"
-echo "die CLI wird nur bei Bedarf manuell mit 'claude' im Projektordner"
-echo "gestartet und beendet sich wieder, sobald du fertig bist."
+echo "Installation complete. No background service is running -"
+echo "the CLI is only started manually with 'claude' in the project"
+echo "folder when needed, and exits again once you are done."
 echo
-echo "Falls oben eine Warnung 'npm warn allow-scripts ... not yet covered'"
-echo "erschien: mit 'claude --version' pruefen, ob es trotzdem funktioniert"
-echo "(sollte eine Versionsnummer ausgeben). Falls nicht:"
+echo "If a warning 'npm warn allow-scripts ... not yet covered'"
+echo "appeared above: check with 'claude --version' whether it still works"
+echo "(it should print a version number). If not:"
 echo "  npm approve-scripts --allow-scripts-pending"
 echo
-echo "Naechster Schritt: einmalig anmelden - VORHER dauerhaft setzen, damit"
-echo "das interaktive Anmelde-Menue beim ersten 'claude'-Aufruf entfaellt:"
-echo "  1) API-Key:"
-echo "       echo 'export ANTHROPIC_API_KEY=<dein-api-key>' >> ~/.bashrc"
+echo "Next step: log in once - set this up beforehand so the interactive"
+echo "login menu is skipped on the first 'claude' call:"
+echo "  1) API key:"
+echo "       echo 'export ANTHROPIC_API_KEY=<your-api-key>' >> ~/.bashrc"
 echo "       source ~/.bashrc"
-echo "  2) Claude Pro/Max (Token auf einem Geraet MIT Browser erzeugen):"
+echo "  2) Claude Pro/Max (generate the token on a device WITH a browser):"
 echo "       claude setup-token"
-echo "     Danach auf dem Pi:"
+echo "     Then on the Pi:"
 echo "       echo 'export CLAUDE_CODE_OAUTH_TOKEN=<token>' >> ~/.bashrc"
 echo "       source ~/.bashrc"
-echo "Details: README Abschnitt 'Claude Code direkt auf dem Pi'."
+echo "Details: README section 'Claude Code direkt auf dem Pi'."
 echo "=================================================================="

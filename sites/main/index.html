@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="de">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Startseite</title>
+  <title>Home</title>
   <style>
     :root {
       color-scheme: light dark;
@@ -64,34 +64,34 @@
 <body>
   <main>
     <header>
-      <!-- Der Domainname wird unten per Skript aus der aktuellen Adresse
-           eingesetzt, damit diese Seite auf JEDER Domain ohne Anpassung läuft. -->
-      <h1 id="titel">Startseite</h1>
-      <p>Selbst gehostet auf einem Raspberry Pi hinter Cloudflare.</p>
+      <!-- The domain name is filled in below via script from the current
+           address, so this page works on ANY domain without changes. -->
+      <h1 id="titel">Home</h1>
+      <p>Self-hosted on a Raspberry Pi behind Cloudflare.</p>
     </header>
 
-    <!-- Beispiel-Kacheln. Neue Seite = Kachel kopieren und data-sub anpassen.
-         Die Links werden per Skript zu <sub>.<deine-domain> zusammengesetzt.
-         Erreichbar sind sie erst, wenn im Cloudflare-Dashboard der passende
-         Public Hostname -> http://caddy:80 angelegt ist (siehe README). -->
+    <!-- Example tiles. New site = copy a tile and adjust data-sub.
+         The links are assembled by the script into <sub>.<deine-domain>.
+         They only become reachable once the matching Public Hostname ->
+         http://caddy:80 has been created in the Cloudflare dashboard (see README). -->
     <div class="grid">
       <a class="card" data-sub="beispiel" href="#">
-        <h2>Beispiel-Unterseite &rarr;</h2>
-        <span>Statische Seite (<code>sites/beispiel/</code>)</span>
+        <h2>Example subpage &rarr;</h2>
+        <span>Static site (<code>sites/beispiel/</code>)</span>
       </a>
       <a class="card" data-sub="app" href="#">
-        <h2>Beispiel-App &rarr;</h2>
-        <span>Dynamische App (<code>apps/app-example/</code>)</span>
+        <h2>Example app &rarr;</h2>
+        <span>Dynamic app (<code>apps/app-example/</code>)</span>
       </a>
     </div>
 
     <footer>
-      Diese Seite liegt in <code>sites/main/index.html</code> — durch eigenen Inhalt ersetzen.
+      This page lives at <code>sites/main/index.html</code> - replace it with your own content.
     </footer>
   </main>
 
   <script>
-    // Aktuelle Domain ermitteln (ohne fuehrendes "www.") und Titel + Links fuellen.
+    // Determine the current domain (without a leading "www.") and fill in the title + links.
     var apex = (location.hostname || "deine-domain.de").replace(/^www\./, "");
     document.getElementById("titel").textContent = apex;
     document.querySelectorAll("a[data-sub]").forEach(function (a) {

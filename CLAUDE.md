@@ -1,76 +1,81 @@
-# CLAUDE.md — Arbeitsanweisung für Claude Code
+# CLAUDE.md - Work Instructions for Claude Code
 
-## Kontext
-Ziel: sicherer Multi-Service-Server (Pi-hole, Caddy als Reverse Proxy,
-Cloudflare Tunnel, Uptime Kuma, eigene App-Container) auf einem Raspberry Pi 4.
+## Context
+Goal: secure multi-service server (Pi-hole, Caddy as reverse proxy,
+Cloudflare Tunnel, Uptime Kuma, own app containers) on a Raspberry Pi 4.
 
-Der Aufbau ist **abgeschlossen** — der Server läuft produktiv. Diese Datei gilt
-vor allem für **Debugging-/Wartungs-Sitzungen**, die direkt auf dem Pi gestartet
-werden (`claude` im Projektordner, siehe README "Claude Code direkt auf dem Pi").
+The build is **complete** - the server runs in production. This file applies
+mainly to **debugging/maintenance sessions** started directly on the Pi
+(`claude` in the project folder, see README "Claude Code Directly on the Pi").
 
-`raspberry-pi-4-spezifikation.md` ist die maßgebliche Quelle für Architektur und
-Constraints. **Lies sie nicht pauschal komplett** — das sind ~6.000 Token, die
-meist nichts zur Aufgabe beitragen:
-- **Debugging/Wartung:** diese Datei + der passende README-Abschnitt (Tabelle
-  unten) genügen. SPEC nur bei konkretem Bedarf.
-- **Architekturänderung** (neuer Dienst, Netz-/Port-/Backup-Umbau): vorher SPEC
-  Abschnitt 2 (Zielarchitektur), 3 (Constraints), 5 (Dienste) und 8 (Backup) lesen.
-- Abschnitte 0, 4, 6, 7, 9 und 10 beschreiben den **Bauvorgang** und sind
-  vollständig umgesetzt — reine Historie, nur für Rückfragen zur Herkunft.
+`raspberry-pi-4-spezifikation.md` is the authoritative source for architecture
+and constraints. **Do not read it in full by default** - that is about 6,000
+tokens which usually contribute nothing to the task at hand:
+- **Debugging/maintenance:** this file plus the matching README section (table
+  below) are enough. Consult the SPEC only when a concrete need arises.
+- **Architecture change** (new service, network/port/backup restructuring):
+  read SPEC section 2 (target architecture), 3 (constraints), 5 (services) and
+  8 (backup) first.
+- Sections 0, 4, 6, 7, 9 and 10 describe the **build process** and have been
+  fully implemented - pure history, useful only for questions about origin.
 
-## Wo steht was (README, ~1.100 Zeilen — gezielt greppen statt komplett lesen)
-| Thema | README-Abschnitt |
+## Where to find what (README, ~1,100 lines - grep for it rather than reading it whole)
+| Topic | README section |
 |---|---|
-| Fehlersuche, bekannte Fallen | `## Troubleshooting` |
-| Neue Website/App anbinden | `## Weitere Websites hosten` |
-| Erstinstallation des Pi | `## Schnellstart (Copy & Paste)` |
-| Image-Versionen, `.env`-Herkunft | `## Referenz: ...` |
-| Claude-CLI auf dem Pi | `## Claude Code direkt auf dem Pi` |
+| Troubleshooting, known pitfalls | `## Troubleshooting` |
+| Connecting a new website/app | `## Hosting Additional Websites` |
+| Initial setup of the Pi | `## Quick Start (Copy & Paste)` |
+| Image versions, `.env` origin | `## Reference:` |
+| Claude CLI on the Pi | `## Claude Code Directly on the Pi` |
 
-## Umgebung
-- Läuft auf dem Raspberry Pi 4 (Raspberry Pi OS Lite, 64-bit, headless).
-- Docker + Docker Compose vorhanden (sonst zuerst `scripts/00-bootstrap.sh`).
-- Repo-Wurzel: `~/pi-server`. Arbeite immer von hier.
-- `sudo` verfügbar; sparsam und nur wie in den Skripten vorgesehen einsetzen.
+## Environment
+- Runs on the Raspberry Pi 4 (Raspberry Pi OS Lite, 64-bit, headless).
+- Docker + Docker Compose already present (otherwise run `scripts/00-bootstrap.sh` first).
+- Repo root: `~/pi-server`. Always work from here.
+- `sudo` is available; use it sparingly and only as the scripts intend.
 
-## Closed-Loop-Arbeitsweise (verbindlich)
-Jede Änderung **Schritt für Schritt**, nie mehrere ungeprüft hintereinander:
-1. Umsetzen (Datei/Skript ändern oder Befehl ausführen).
-2. Mit einem konkreten Check verifizieren.
-3. Erst weitergehen, wenn der Check bestanden ist. Bei Fehler: Ausgabe lesen, Ursache beheben, erneut prüfen.
+## Closed-loop workflow (mandatory)
+Every change **step by step**, never several unverified changes in a row:
+1. Implement (change a file/script or run a command).
+2. Verify with a concrete check.
+3. Only proceed once the check passes. On failure: read the output, fix the
+   cause, check again.
 
-Verifikations-Checks (auch gebündelt über `bash scripts/verify.sh`):
-- Compose gültig: `docker compose config`
-- Dienste laufen: `docker compose ps`
-- Firewall: `sudo ufw status verbose` → Default-Deny + nur LAN-Regeln
-- Web öffentlich erreichbar: `curl -I https://<DOMAIN>`
-- Keine Secrets im Git: `git ls-files | grep -E '(^|/)\.env$|^data/'` muss leer sein
+Verification checks (also bundled via `bash scripts/verify.sh`):
+- Compose is valid: `docker compose config`
+- Services are running: `docker compose ps`
+- Firewall: `sudo ufw status verbose` -> default-deny plus LAN rules only
+- Website reachable publicly: `curl -I https://<DOMAIN>`
+- No secrets in git: `git ls-files | grep -E '(^|/)\.env$|^data/'` must be empty
 
-## Harte Regeln (SPEC Abschnitt 3 — NIEMALS verletzen)
-Diese Liste ist **vollständig**; sie ersetzt das Nachschlagen von SPEC Abschnitt 3.
-- [N2] Kein `:latest`; alle Images auf konkrete Version pinnen (Tag in README notieren).
-- [N3] `.env`, `data/`, Backup-Artefakte (`*.tar.gz`, `*.age`) NIE committen.
-- [N1]/[M8] Keine eingehende Portfreigabe am Router. `caddy` und **alle
-  App-Container** bekommen KEINEN `ports:`-Eintrag — sie sind ausschließlich
-  über `cloudflared` im internen Docker-Netz erreichbar. (Der frühere
-  nginx-Dienst `web` existiert seit v2.4 nicht mehr.)
-- [N4] Keinen Dienst an `0.0.0.0` binden, außer implizit über den Tunnel.
-- [M3] Admin-UIs (`pihole`, `uptime-kuma`) nur an `${PI_STATIC_IP}` binden.
-- [M4] `ufw` Default-Deny eingehend; Admin-Ports und SSH nur aus `${LAN_SUBNET}`.
-- [M5] Secrets ausschließlich in `.env` (gitignored) plus verschlüsselte Kopie
-  im Backup-Remote. App-Secrets (`SESSION_SECRET`, `ADMIN_*`) liegen in
-  `apps/<name>/.env`, geschrieben von `scripts/deploy.sh`, Modus 600.
-- [M6] SSH key-only; kein Passwort-Login, kein Root-Login.
-- [M1] Jeder Container: `restart: unless-stopped`.
-- [M7] Backup-Restore muss real getestet sein/bleiben.
-- Läuft eine Claude Code CLI auf dem Pi (SPEC 5.6): niemals als
-  Hintergrunddienst/Autostart einrichten (kein systemd-Unit, kein Cronjob) —
-  nur On-Demand-Aufruf.
+## Hard rules (SPEC section 3 - NEVER violate)
+This list is **complete**; it replaces looking up SPEC section 3.
+- [N2] No `:latest`; pin all images to a concrete version (note the tag in the README).
+- [N3] Never commit `.env`, `data/`, or backup artifacts (`*.tar.gz`, `*.age`).
+- [N1]/[M8] No inbound port forwarding on the router. `caddy` and **all
+  app containers** get NO `ports:` entry - they are reachable exclusively
+  via `cloudflared` on the internal Docker network. (The former nginx
+  service `web` has not existed since v2.4.)
+- [N4] Do not bind any service to `0.0.0.0`, except implicitly via the tunnel.
+- [M3] Admin UIs (`pihole`, `uptime-kuma`) bind only to `${PI_STATIC_IP}`.
+- [M4] `ufw` default-deny inbound; admin ports and SSH only from `${LAN_SUBNET}`.
+- [M5] Secrets live exclusively in `.env` (gitignored) plus an encrypted copy
+  in the backup remote. App secrets (`SESSION_SECRET`, `ADMIN_*`) live in
+  `apps/<name>/.env`, written by `scripts/deploy.sh`, mode 600.
+- [M6] SSH key-only; no password login, no root login.
+- [M1] Every container: `restart: unless-stopped`.
+- [M7] Backup restore must be, and must remain, actually tested.
+- If a Claude Code CLI runs on the Pi (SPEC 5.6): never set it up as a
+  background service/autostart (no systemd unit, no cron job) - on-demand
+  invocation only.
 
-## Vorgehen bei Unsicherheit
-- Versionsabhängige Details (z. B. Pi-hole-v6-Env-Variablennamen, Image-Tags, Cloudflare-Dashboard-Wortlaut) gegen die offizielle Doku verifizieren — nicht raten.
-- Zerstörerische Befehle (`rm -rf`, `docker volume rm`, `ufw reset`) vorher ankündigen und bestätigen lassen.
-- **Dies ist ein LIVE-Server** (DNS fürs ganze LAN + öffentliche Webseite). Handle vorsichtig; keine breiten Löschaktionen ohne Rückfrage.
+## What to do when unsure
+- Verify version-dependent details (e.g. Pi-hole v6 env variable names, image
+  tags, Cloudflare dashboard wording) against the official docs - do not guess.
+- Announce destructive commands (`rm -rf`, `docker volume rm`, `ufw reset`)
+  beforehand and get confirmation.
+- **This is a LIVE server** (DNS for the whole LAN plus a public website).
+  Act carefully; no broad deletions without asking first.
 
-## Nicht im Scope
-- WireGuard/Tailscale nur, wenn ausdrücklich angefordert (SPEC 5.5).
+## Out of scope
+- WireGuard/Tailscale only if explicitly requested (SPEC 5.5).

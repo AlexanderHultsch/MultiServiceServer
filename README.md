@@ -1,213 +1,213 @@
-# PiMultiServiceServer — Sicherer Multi-Service-Server für Raspberry Pi 4
+# PiMultiServiceServer - Secure Multi-Service Server for Raspberry Pi 4
 
-Dieses Repository baut aus einem Raspberry Pi 4 einen kleinen, sicheren
-Heimserver auf. Setzt `raspberry-pi-4-spezifikation.md` (v2.4) um, die als
-maßgebliche Quelle der Wahrheit für alle technischen Entscheidungen dient.
+This repository turns a Raspberry Pi 4 into a small, secure home server. It
+implements `raspberry-pi-4-spezifikation.md` (v2.4), which serves as the
+authoritative source of truth for all technical decisions.
 
-## Was am Ende dabei herauskommt
+## What You End Up With
 
-- **Beliebig viele Websites** unter deiner eigenen Domain und Subdomains
-  (`deine-domain.de`, `beispiel.deine-domain.de`, …), öffentlich im Internet
-  erreichbar — ohne einen einzigen Port am Router freizugeben. Statische
-  Seiten und dynamische Apps (eigener Container) parallel, jede optional in
-  ihrem eigenen Git-Repo (siehe „Weitere Websites hosten").
-- **Pi-hole**: ein netzwerkweiter DNS-Server, der Werbung und Tracker für
-  alle Geräte in deinem Heimnetz blockiert (Handys, Laptops, Smart-TVs, …),
-  ohne dass auf jedem Gerät einzeln etwas installiert werden muss.
-- **Uptime Kuma**: ein Dashboard, das dir anzeigt, ob Webseite, Pi-hole und
-  Internetverbindung laufen, und dich bei Ausfällen benachrichtigt.
-- **Automatische, verschlüsselte Backups** aller Konfigurationsdaten in die
-  Cloud (z. B. OneDrive), mit Rotation alter Stände.
-- Ein System, das nach den üblichen Grundregeln für Internet-exponierte
-  Server gehärtet ist: kein Passwort-Login per SSH, Firewall im
-  Default-Deny-Modus, keine unnötig offenen Ports.
+- **As many websites as you like** under your own domain and subdomains
+  (`deine-domain.de`, `beispiel.deine-domain.de`, ...), publicly reachable on
+  the internet - without opening a single port on the router. Static sites
+  and dynamic apps (own container) side by side, each optionally in its own
+  Git repo (see "Hosting Additional Websites").
+- **Pi-hole**: a network-wide DNS server that blocks ads and trackers for
+  every device on your home network (phones, laptops, smart TVs, ...),
+  without installing anything on each device individually.
+- **Uptime Kuma**: a dashboard that shows you whether the website, Pi-hole,
+  and internet connection are up, and notifies you of outages.
+- **Automatic, encrypted backups** of all configuration data to the cloud
+  (e.g. OneDrive), with rotation of old backups.
+- A system hardened according to the usual baseline rules for
+  internet-exposed servers: no password login over SSH, firewall in
+  default-deny mode, no unnecessarily open ports.
 
-Die Websites laufen technisch hinter einem **Cloudflare Tunnel**: der Pi baut
-selbst eine ausgehende, verschlüsselte Verbindung zu Cloudflare auf, worüber
-die Seiten öffentlich erreichbar werden. Von außen bleibt am Router dadurch
-kein einziger Port offen — der Pi ist im Heimnetz unsichtbar. Innerhalb des
-Pi verteilt **Caddy** (ein Reverse Proxy) jeden Hostnamen an die richtige
-Seite: statische Seiten direkt aus Ordnern, dynamische Apps an deren Container.
+The websites technically run behind a **Cloudflare Tunnel**: the Pi itself
+opens an outbound, encrypted connection to Cloudflare, through which the
+sites become publicly reachable. As a result, not a single port stays open
+on the router as seen from outside - the Pi is invisible on the home
+network. Inside the Pi, **Caddy** (a reverse proxy) routes every hostname to
+the right site: static sites straight from folders, dynamic apps to their
+containers.
 
 ```
                      Internet
-                        │  (nur AUSGEHEND, verschlüsselt)
-                 ┌──────▼──────┐
-                 │ Cloudflare  │  DNS · TLS · DDoS-Schutz · versteckt Heim-IP
-                 └──────┬──────┘
-                        │  outbound-only Tunnel
-╔═══════════════════════▼═══════════════════════════════════════╗
-║ Raspberry Pi · ufw Default-Deny (eingehend)                   ║
-║                                                               ║
-║  cloudflared ──▶ caddy ──▶ sites/main        (statisch)       ║
-║                    │  └───▶ sites/beispiel     (statisch)       ║
-║                    └──────▶ app-example       (dynam. App)    ║
-║                                                               ║
-║  pihole (DNS+Adblock, nur LAN)   uptime-kuma (nur LAN)        ║
-╚═══════════════════════════════════════════════════════════════╝
-                        │
+                        |  (outbound only, encrypted)
+                 +------v------+
+                 | Cloudflare  |  DNS / TLS / DDoS protection / hides home IP
+                 +------+------+
+                        |  outbound-only tunnel
+ ========================v=========================================
+ : Raspberry Pi - ufw default-deny (inbound)                       :
+ :                                                                  :
+ :  cloudflared --> caddy --> sites/main         (static)          :
+ :                    +  +---> sites/beispiel      (static)        :
+ :                    +------> app-example        (dynamic app)    :
+ :                                                                  :
+ :  pihole (DNS+adblock, LAN only)   uptime-kuma (LAN only)        :
+ ========================================================================
+                        |
                    LAN (${LAN_SUBNET})
-          alle Geräte nutzen ${PI_STATIC_IP} als DNS
+          all devices use ${PI_STATIC_IP} as DNS
 ```
 
-Dieses README erklärt zu jedem Wert, den du eintragen musst, **woher** er
-kommt und **wie** du ihn bekommst. Wo es ging, wurde die manuelle Arbeit in
-Skripte gepackt (`scripts/setup-env.sh`, `scripts/verify.sh`,
-`scripts/install-backup-cron.sh`) — übrig bleiben nur die Schritte, die
-zwingend eine Cloudflare-/Router-Weboberfläche brauchen.
+This README explains, for every value you have to enter, **where** it comes
+from and **how** you get it. Wherever possible, the manual work has been
+packed into scripts (`scripts/setup-env.sh`, `scripts/verify.sh`,
+`scripts/install-backup-cron.sh`) - what remains are only the steps that
+absolutely require a Cloudflare/router web interface.
 
-> **Hinweis, falls das Repository öffentlich ist:** Jeder kann
-> `docker-compose.yml`, die Skripte und dieses README lesen. Das ist
-> unproblematisch, solange `.env` und `data/` (siehe `.gitignore`) niemals
-> committet werden — dort leben alle Geheimnisse (Pi-hole-Passwort,
-> Cloudflare-Token, age-Key). Vor jedem `git push`: `git status` prüfen,
-> im Zweifel `git ls-files | grep -E '(^|/)\.env$|^data/'` ausführen (muss
-> leer sein — wird auch von `scripts/verify.sh` automatisch geprüft).
+> **Note, in case this repository is public:** anyone can read
+> `docker-compose.yml`, the scripts, and this README. That is not a problem
+> as long as `.env` and `data/` (see `.gitignore`) are never committed - all
+> the secrets live there (Pi-hole password, Cloudflare token, age key).
+> Before every `git push`: check `git status`; when in doubt run
+> `git ls-files | grep -E '(^|/)\.env$|^data/'` (must be empty - this is also
+> checked automatically by `scripts/verify.sh`).
 
 ---
 
-## Übersicht: automatisiert vs. manuell
+## Overview: Automated vs. Manual
 
-| Automatisiert (per Skript) | Manuell (Web-UI / Router, nicht automatisierbar) |
+| Automated (via script) | Manual (web UI / router, cannot be automated) |
 |---|---|
-| System-Update, Docker-Installation | SD-Karte flashen |
-| SSH-Härtung, Firewall-Regeln | SSH-Public-Key auf dem Pi hinterlegen |
-| `.env` erzeugen inkl. LAN-Erkennung | Domain zu Cloudflare hinzufügen |
-| age-Schlüsselpaar erzeugen | Cloudflare Tunnel + Public Hostname anlegen |
-| Backup, Verschlüsselung, Rotation, Upload | `rclone config` (OAuth-Login im Browser) |
-| Cron-Job für nächtliches Backup | DHCP-Reservierung + Pi-hole als DNS im Router |
-| Alle Verifikations-Checks (`verify.sh`) | Realer Restore-Test auf frischer Hardware ([M7]) |
+| System update, Docker installation | Flashing the SD card |
+| SSH hardening, firewall rules | Adding the SSH public key on the Pi |
+| Generating `.env` including LAN detection | Adding the domain to Cloudflare |
+| Generating the age key pair | Creating the Cloudflare Tunnel + public hostname |
+| Backup, encryption, rotation, upload | `rclone config` (OAuth login in the browser) |
+| Cron job for the nightly backup | DHCP reservation + Pi-hole as DNS on the router |
+| All verification checks (`verify.sh`) | Real restore test on fresh hardware ([M7]) |
 
 ---
 
-## Voraussetzungen
+## Prerequisites
 
-- Ein Computer (Windows/Mac/Linux) zum Flashen der SD-Karte und für SSH.
-- Raspberry Pi 4, microSD-Karte oder USB-SSD, Netzteil, Netzwerkkabel oder WLAN.
-- Ein Cloudflare-Account (kostenlos): <https://dash.cloudflare.com/sign-up>
-- Eine Domain, die bei Cloudflare als "Zone" verwaltet wird. Ohne bestehende
-  Domain am einfachsten: direkt im Cloudflare Dashboard eine registrieren
-  (landet automatisch auf Cloudflare-Nameservern). Mit bestehender Domain
-  bei einem anderen Anbieter: im Cloudflare Dashboard hinzufügen, die zwei
-  angezeigten Nameserver beim bisherigen Anbieter eintragen — die
-  Registrierung selbst muss dafür nicht umziehen.
-- Ein Ziel für verschlüsselte Backups, das `rclone` unterstützt (Default:
-  OneDrive — jeder von `rclone config` unterstützte Dienst funktioniert).
+- A computer (Windows/Mac/Linux) to flash the SD card and for SSH.
+- Raspberry Pi 4, microSD card or USB SSD, power supply, network cable or WLAN.
+- A Cloudflare account (free): <https://dash.cloudflare.com/sign-up>
+- A domain managed by Cloudflare as a "zone". If you do not have an existing
+  domain, the simplest option is to register one directly in the Cloudflare
+  dashboard (it lands on Cloudflare nameservers automatically). With an
+  existing domain at another provider: add it in the Cloudflare dashboard,
+  then enter the two nameservers it shows you at your current provider - the
+  registration itself does not need to move.
+- A target for encrypted backups that `rclone` supports (default: OneDrive -
+  any service supported by `rclone config` works).
 
-### SSH-Schlüsselpaar erzeugen (falls noch nicht vorhanden)
+### Generating an SSH Key Pair (If You Don't Have One Yet)
 
-Wird gebraucht, um sich später passwortlos auf dem Pi anzumelden — Pflicht
-laut Spezifikation ([M6]: kein Passwort-Login).
+Needed so you can later log in to the Pi without a password - mandatory per
+the specification ([M6]: no password login).
 
 ```bash
-# Mac/Linux (auf dem eigenen Computer, NICHT auf dem Pi):
+# Mac/Linux (on your own computer, NOT on the Pi):
 ls ~/.ssh/id_ed25519.pub 2>/dev/null || ssh-keygen -t ed25519 -C "pi-server"
 ```
 
-Windows: PowerShell öffnen und denselben Befehl ausführen (OpenSSH-Client ist
-seit Windows 10 vorinstalliert), oder PuTTYgen verwenden.
+Windows: open PowerShell and run the same command (the OpenSSH client has
+been preinstalled since Windows 10), or use PuTTYgen.
 
 ---
 
-## Schnellstart (Copy & Paste)
+## Quick Start (Copy & Paste)
 
-**Alle 16 Schritte im Überblick** — Details folgen darunter:
+**All 16 steps at a glance** - details follow below:
 
-| # | Schritt | Wo |
+| # | Step | Where |
 |---|---|---|
-| 1 | SD-Karte flashen, SSH vorbereiten | Eigener Computer |
-| 2 | Per SSH verbinden | Eigener Computer |
-| 3 | Repo klonen | Pi |
-| 4 | `.env` per Assistent erzeugen | Pi |
-| 5 | Bootstrap (Docker, Pakete) | Pi |
-| 6 | Feste IP reservieren | Router |
-| 7 | Härtung (SSH, Firewall) | Pi |
-| 8 | Cloudflare Tunnel anlegen | Cloudflare-Dashboard |
-| 9 | Dienste starten | Pi |
-| 10 | Pi-hole als Netzwerk-DNS | Router |
-| 11 | Öffentliche Webseite prüfen | Pi |
-| 12 | Uptime Kuma einrichten | Browser (LAN) |
-| 13 | Backup-Ziel verbinden (rclone) | Pi |
-| 14 | Backup testen + Cron einrichten | Pi |
-| 15 | Gesamt-Verifikation | Pi |
-| 16 | Restore-Test | Frisches System |
+| 1 | Flash SD card, prepare SSH | Your own computer |
+| 2 | Connect via SSH | Your own computer |
+| 3 | Clone the repo | Pi |
+| 4 | Generate `.env` via the assistant | Pi |
+| 5 | Bootstrap (Docker, packages) | Pi |
+| 6 | Reserve a static IP | Router |
+| 7 | Hardening (SSH, firewall) | Pi |
+| 8 | Create the Cloudflare Tunnel | Cloudflare dashboard |
+| 9 | Start the services | Pi |
+| 10 | Pi-hole as the network DNS | Router |
+| 11 | Check the public website | Pi |
+| 12 | Set up Uptime Kuma | Browser (LAN) |
+| 13 | Connect the backup target (rclone) | Pi |
+| 14 | Test the backup + set up cron | Pi |
+| 15 | Full verification | Pi |
+| 16 | Restore test | Fresh system |
 
-> **Sudo-Konvention:** Alle Skripte **ohne** `sudo` starten — sie fordern
-> root-Rechte selbst an, wo nötig, und brechen mit klarer Meldung ab, wenn
-> etwas fehlt. Einzige Ausnahme: `scripts/backup.sh` braucht
-> `sudo bash scripts/backup.sh` (Begründung in Schritt 14).
+> **Sudo convention:** start all scripts **without** `sudo` - they request
+> root privileges themselves where needed, and abort with a clear message if
+> something is missing. The one exception is `scripts/backup.sh`, which
+> needs `sudo bash scripts/backup.sh` (reasoning in step 14).
 
-### 1. SD-Karte flashen und SSH vorbereiten
+### 1. Flash the SD Card and Prepare SSH
 
-> **Kein Standard-Benutzer "pi" mehr:** Seit Raspberry Pi OS "Bookworm" gibt
-> es keinen vorinstallierten `pi`-Nutzer. Im Imager wird unter "Advanced
-> options" ein **eigener Benutzername** festgelegt. In diesem README steht
-> überall `<benutzer>` als Platzhalter dafür — in jedem Befehl durch den
-> tatsächlich vergebenen Namen ersetzen.
+> **No more default "pi" user:** since Raspberry Pi OS "Bookworm" there is no
+> longer a preinstalled `pi` user. In the Imager, under "Advanced options",
+> you set your **own username**. Throughout this README, `<username>` is a
+> placeholder for that - in every command, replace it with the actual name
+> you chose.
 
-1. [Raspberry Pi Imager](https://www.raspberrypi.com/software/) installieren und öffnen.
-2. Gerät: **Raspberry Pi 4**. Betriebssystem: **Raspberry Pi OS Lite (64-bit)**.
-3. Auf das Zahnrad-Symbol (⚙, "Advanced options") klicken, dort:
-   - Hostname vergeben (z. B. `pi-server`)
-   - **Benutzername und Passwort festlegen** — ein Passwort auch dann
-     setzen, wenn Public-Key-Login gewünscht ist (Fallback, falls der
-     Key-Import nicht greift, siehe Kasten unten — das kommt gelegentlich vor).
-   - SSH aktivieren → "Allow public-key authentication only" → den
-     **Public Key** einfügen (Inhalt von `~/.ssh/id_ed25519.pub`, NICHT den
-     privaten Schlüssel!). Manche Imager-Versionen übernehmen den
-     eingefügten Key beim Schreiben nicht zuverlässig — nach dem ersten
-     Login immer mit dem Befehl im Kasten unten verifizieren.
-   - Falls per WLAN: SSID/Passwort hinterlegen
-4. Schreiben, SD-Karte in den Pi, Pi einschalten.
+1. Install and open the [Raspberry Pi Imager](https://www.raspberrypi.com/software/).
+2. Device: **Raspberry Pi 4**. Operating system: **Raspberry Pi OS Lite (64-bit)**.
+3. Click the gear icon (the "Advanced options"), and there:
+   - Set a hostname (e.g. `pi-server`)
+   - **Set a username and password** - set a password even if you want
+     public-key login only (as a fallback in case the key import does not
+     take effect, see the box below - this happens occasionally).
+   - Enable SSH -> "Allow public-key authentication only" -> paste the
+     **public key** (the content of `~/.ssh/id_ed25519.pub`, NOT the private
+     key!). Some Imager versions do not reliably apply the pasted key when
+     writing the card - always verify with the command in the box below
+     after the first login.
+   - If using WLAN: enter the SSID/password
+4. Write the image, insert the SD card into the Pi, power on the Pi.
 
-#### Prüfen, was der Imager tatsächlich eingerichtet hat
+#### Checking What the Imager Actually Set Up
 
-Nach dem ersten Login **immer** prüfen, ob wirklich ein **Public Key**
-hinterlegt wurde (nicht nur Passwort-Login funktioniert) — Voraussetzung für
-Schritt 7 (`01-harden.sh` bricht sonst mit einer Fehlermeldung ab, damit man
-sich nicht aussperrt):
+After the first login, **always** check whether a **public key** was
+actually added (not just that password login works) - this is a prerequisite
+for step 7 (`01-harden.sh` otherwise aborts with an error message, so you
+don't lock yourself out):
 
 ```bash
-cat ~/.ssh/authorized_keys 2>/dev/null && echo "OK: Key vorhanden" || echo "FEHLT: siehe unten"
+cat ~/.ssh/authorized_keys 2>/dev/null && echo "OK: key present" || echo "MISSING: see below"
 ```
 
-**Falls das leer ist** (Imager-Key-Import hat nicht funktioniert, Login
-gerade nur per Passwort — ein bekanntes, gelegentliches Imager-Problem):
-Key jetzt vom eigenen Computer aus nachtragen, über die bestehende
-Passwort-Anmeldung:
+**If that is empty** (the Imager's key import did not work, login currently
+works only via password - a known, occasional Imager issue): add the key
+now from your own computer, using the existing password login:
 
 ```bash
-# Mac/Linux, auf dem eigenen Computer, Passwort wird einmal abgefragt:
-ssh-copy-id <benutzer>@pi-server.local
+# Mac/Linux, on your own computer, you will be prompted for the password once:
+ssh-copy-id <username>@pi-server.local
 ```
 
 ```powershell
-# Windows (PowerShell), auf dem eigenen Computer, falls ssh-copy-id fehlt:
-Get-Content $env:USERPROFILE\.ssh\id_ed25519.pub | ssh <benutzer>@pi-server.local "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys"
+# Windows (PowerShell), on your own computer, if ssh-copy-id is not available:
+Get-Content $env:USERPROFILE\.ssh\id_ed25519.pub | ssh <username>@pi-server.local "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys"
 ```
 
-Danach auf dem Pi erneut prüfen (Befehl oben) — erst wenn "OK: Key
-vorhanden" erscheint, weiter mit Schritt 2 bzw. Schritt 7.
+Then check again on the Pi (command above) - only once "OK: key present"
+appears, continue with step 2 or step 7.
 
-### 2. Verbinden
+### 2. Connect
 
 ```bash
-# Pi im Netzwerk finden (Standard-Hostname bzw. der vergebene):
+# Find the Pi on the network (default hostname, or the one you set):
 ping pi-server.local
 
-# Verbinden (<benutzer> = der im Imager gesetzte Benutzername):
-ssh <benutzer>@pi-server.local
+# Connect (<username> = the username set in the Imager):
+ssh <username>@pi-server.local
 ```
 
-Falls `*.local` nicht auflöst: IP über die Geräteliste des Routers ermitteln
-(Admin-Oberfläche des Routers, meist erreichbar unter `192.168.0.1` oder
-`192.168.1.1` — steht auf der Rückseite des Routers oder in dessen App).
+If `*.local` does not resolve: find the IP via the router's device list (the
+router's admin interface, usually reachable at `192.168.0.1` or
+`192.168.1.1` - printed on the back of the router or in its app).
 
-### 3. Repo klonen
+### 3. Clone the Repo
 
-Raspberry Pi OS Lite hat `git` nicht vorinstalliert — an dieser Stelle ist
-`scripts/00-bootstrap.sh` (das `git` mitinstalliert) noch nicht ausgeführt,
-also erst kurz manuell nachinstallieren:
+Raspberry Pi OS Lite does not have `git` preinstalled - at this point
+`scripts/00-bootstrap.sh` (which installs `git` among other things) has not
+run yet, so install it manually first, briefly:
 
 ```bash
 sudo apt update && sudo apt install -y git
@@ -215,484 +215,479 @@ git clone https://github.com/AlexanderHultsch/PiMultiServiceServer.git ~/pi-serv
 cd ~/pi-server
 ```
 
-### 4. `.env` interaktiv erzeugen
+### 4. Generate `.env` Interactively
 
 ```bash
 bash scripts/setup-env.sh
 ```
 
-Das Skript fragt jeden Wert einzeln ab, erklärt dabei woher er kommt,
-schlägt sinnvolle Defaults vor (u. a. automatisch erkanntes LAN), generiert
-bei Bedarf ein sicheres Pi-hole-Passwort sowie automatisch das
-age-Schlüsselpaar fürs Backup, und schreibt am Ende `.env` (mit `chmod 600`).
+The script asks for each value individually, explains where it comes from,
+suggests sensible defaults (including an automatically detected LAN),
+generates a secure Pi-hole password if needed as well as the age key pair
+for backups automatically, and finally writes `.env` (with `chmod 600`).
 
-Falls der Cloudflare-Tunnel-Token (Schritt 8) noch nicht vorliegt: bei der
-Frage einfach Enter drücken und später manuell in `.env` nachtragen — das
-Skript weist am Ende noch einmal darauf hin.
+If the Cloudflare tunnel token (step 8) is not available yet: just press
+Enter at that prompt and add it to `.env` manually later - the script points
+this out again at the end.
 
-### 5. System-Bootstrap (Docker, Pakete, Updates)
+### 5. System Bootstrap (Docker, Packages, Updates)
 
 ```bash
 bash scripts/00-bootstrap.sh
 ```
 
-Danach einmal ab- und wieder anmelden (die neue `docker`-Gruppenmitgliedschaft
-wird erst nach einem neuen Login aktiv):
+Afterwards, log out and back in once (the new `docker` group membership only
+becomes active after a fresh login):
 
 ```bash
 exit
-ssh <benutzer>@pi-server.local
+ssh <username>@pi-server.local
 cd ~/pi-server
 ```
 
-### 6. Feste IP für den Pi reservieren (Router, manuell)
+### 6. Reserve a Static IP for the Pi (Router, Manual)
 
-**Wichtig zu verstehen:** Diese Reservierung verknüpft eine **MAC-Adresse**
-mit einer IP. WLAN und Ethernet (LAN-Kabel) sind auf dem Pi **zwei
-unterschiedliche Netzwerk-Interfaces mit je einer eigenen MAC-Adresse**
-(`wlan0` bzw. `eth0`). Der Router muss wissen, **welche der beiden
-MAC-Adressen gerade tatsächlich verbunden ist** — die IP wird für genau
-dieses Interface reserviert. Bei einem späteren Wechsel des Interfaces (z. B.
-WLAN → LAN-Kabel) muss die Reservierung im Router einmalig auf die andere
-MAC-Adresse umgestellt werden (siehe Kasten unten) — `PI_STATIC_IP` selbst
-bleibt dabei gleich.
+**Important to understand:** this reservation links a **MAC address** to an
+IP. WLAN and Ethernet (LAN cable) are **two different network interfaces on
+the Pi, each with its own MAC address** (`wlan0` and `eth0` respectively).
+The router needs to know **which of the two MAC addresses is actually
+connected right now** - the IP is reserved for exactly that interface. If
+you later switch interfaces (e.g. WLAN -> LAN cable), the reservation in the
+router has to be switched over to the other MAC address once (see the box
+below) - `PI_STATIC_IP` itself stays the same.
 
-Zweiter entscheidender Punkt: **die IP, die im Router bei der Reservierung
-steht, muss exakt mit `PI_STATIC_IP` in `.env` übereinstimmen** — das
-passiert nicht automatisch, nur weil ein Schalter aktiv ist.
+Second key point: **the IP entered in the router's reservation must exactly
+match `PI_STATIC_IP` in `.env`** - that does not happen automatically just
+because a toggle is enabled.
 
-1. Herausfinden, welches Interface gerade aktiv verbunden ist, und dessen
-   MAC-Adresse notieren:
+1. Find out which interface is currently actively connected, and note its
+   MAC address:
    ```bash
    ip -4 addr show
    ```
-   Das Interface mit einer Zeile `inet 192.168.x.x/24 ...` ist das aktive.
-   MAC-Adresse dieses Interfaces:
+   The interface with a line `inet 192.168.x.x/24 ...` is the active one.
+   MAC address of that interface:
    ```bash
-   ip link show wlan0 | awk '/ether/ {print $2}'   # bei Ethernet: eth0 statt wlan0
+   ip link show wlan0 | awk '/ether/ {print $2}'   # for Ethernet: eth0 instead of wlan0
    ```
-2. Aktuellen `PI_STATIC_IP`-Wert aus `.env` nachsehen, damit klar ist,
-   welche IP im Router eingetragen sein muss:
+2. Look up the current `PI_STATIC_IP` value from `.env`, so you know which
+   IP has to be entered in the router:
    ```bash
    grep -E 'PI_STATIC_IP|LAN_SUBNET' ~/pi-server/.env
    ```
 
-#### FRITZ!Box (sehr verbreitet, z. B. AVM-Router)
+#### FRITZ!Box (Very Common, e.g. AVM Routers)
 
-1. Im Browser <http://fritz.box> (oder <http://192.168.178.1>) öffnen, mit
-   dem Kennwort der FRITZ!Box anmelden.
-2. **Heimnetz → Netzwerk → Netzwerkverbindungen**.
-3. Den Pi in der Geräteliste suchen (Name `pi-server` bzw. die MAC-Adresse
-   des **aktiven** Interfaces von oben) und auf das Stift-/Bearbeiten-Symbol
-   klicken.
-4. Dort findet sich der Schalter **"IPv4-Adresse dauerhaft zuweisen"**.
-   Direkt daneben/darüber steht ein **IPv4-Adressfeld**: genau **dieser
-   Wert** ist die IP, die reserviert wird.
-   - Steht dort bereits dieselbe Adresse wie `PI_STATIC_IP` aus `.env` →
-     nichts weiter zu tun, mit **Übernehmen** bestätigen/speichern.
-   - Steht dort eine **andere** Adresse (typisch, wenn der Pi vorher
-     automatisch per DHCP eine andere IP bekommen hat): entweder das Feld
-     auf den Wert von `PI_STATIC_IP` ändern (muss innerhalb des von der
-     FRITZ!Box verwalteten Bereichs liegen, Standard meist `192.168.178.x`),
-     **oder** einfacher: den im Router angezeigten Wert 1:1 in `.env` als
-     `PI_STATIC_IP` übernehmen (`nano ~/pi-server/.env`).
-5. **FRITZ!Box-Standard-LAN ist `192.168.178.0/24`**, nicht `192.168.1.0/24`.
-   Falls `LAN_SUBNET` in `.env` noch `192.168.1.0/24` ist (z. B. weil
-   `setup-env.sh` es nicht korrekt erkannt hat), jetzt auf `192.168.178.0/24`
-   korrigieren — sonst funktionieren die `ufw`-Regeln aus Schritt 7 nicht
-   für das tatsächliche LAN.
-6. Speichern/**Übernehmen** klicken.
+1. Open <http://fritz.box> (or <http://192.168.178.1>) in a browser and log
+   in with the FRITZ!Box password.
+2. **Home Network -> Network -> Network Connections**.
+3. Find the Pi in the device list (name `pi-server`, or the MAC address of
+   the **active** interface from above) and click the pencil/edit icon.
+4. There you will find the switch **"Always assign this device the same
+   IPv4 address"**. Right next to/above it is an **IPv4 address field**:
+   this exact **value** is the IP that gets reserved.
+   - If it already shows the same address as `PI_STATIC_IP` from `.env` ->
+     nothing else to do, confirm/save with **Apply**.
+   - If it shows a **different** address (typical if the Pi previously got a
+     different IP automatically via DHCP): either change the field to the
+     value of `PI_STATIC_IP` (must be within the range managed by the
+     FRITZ!Box, usually `192.168.178.x` by default), **or**, more simply:
+     copy the value shown in the router 1:1 into `.env` as `PI_STATIC_IP`
+     (`nano ~/pi-server/.env`).
+5. **The FRITZ!Box default LAN is `192.168.178.0/24`**, not `192.168.1.0/24`.
+   If `LAN_SUBNET` in `.env` is still `192.168.1.0/24` (e.g. because
+   `setup-env.sh` did not detect it correctly), correct it now to
+   `192.168.178.0/24` - otherwise the `ufw` rules from step 7 will not work
+   for the actual LAN.
+6. Click Save/**Apply**.
 
-#### Andere Router-Hersteller
+#### Other Router Brands
 
-Menüpunkt heißt dort meist **"DHCP-Reservierung"** / **"Static Lease"** /
-**"Address Reservation"** (Bezeichnung variiert je nach Hersteller); gleiches
-Prinzip: MAC-Adresse des **aktiven** Interfaces mit dem `PI_STATIC_IP`-Wert
-aus `.env` verknüpfen — im Zweifel lieber die im Router angezeigte/vergebene
-Adresse in `.env` übernehmen als umgekehrt.
+The menu item there is usually called **"DHCP reservation"** / **"static
+lease"** / **"address reservation"** (the wording varies by manufacturer);
+same principle: link the MAC address of the **active** interface to the
+`PI_STATIC_IP` value from `.env` - when in doubt, it is easier to copy the
+address shown/assigned by the router into `.env` than the other way around.
 
-#### Später von WLAN auf LAN-Kabel wechseln
+#### Switching From WLAN to a LAN Cable Later
 
-Bei Einrichtung über WLAN mit späterem Wechsel auf ein LAN-Kabel: das ändert
-**nichts** an `.env`, `docker-compose.yml` oder den `ufw`-Regeln — die IP
-bleibt identisch, nur die Netzwerk-Hardware wechselt. Zu erledigen ist dann
-nur:
+If you set things up over WLAN and later switch to a LAN cable: this changes
+**nothing** in `.env`, `docker-compose.yml`, or the `ufw` rules - the IP
+stays identical, only the network hardware changes. All that is left to do
+is:
 
-1. LAN-Kabel einstecken.
-2. Im Router (FRITZ!Box: siehe oben) die **gleiche Reservierung** (gleiche
-   `PI_STATIC_IP`) auf die MAC-Adresse von `eth0` umstellen (statt `wlan0`):
+1. Plug in the LAN cable.
+2. In the router (FRITZ!Box: see above), switch the **same reservation**
+   (same `PI_STATIC_IP`) to the MAC address of `eth0` (instead of `wlan0`):
    ```bash
    ip link show eth0 | awk '/ether/ {print $2}'
    ```
-   Diesen Wert im Router anstelle der bisherigen `wlan0`-MAC-Adresse eintragen.
-3. `sudo reboot`, danach mit dem Verifikationsbefehl unten prüfen.
+   Enter this value in the router in place of the previous `wlan0` MAC address.
+3. `sudo reboot`, then check with the verification command below.
 
-**WLAN dabei aktiviert lassen, nicht deaktivieren.** Linux bevorzugt bei
-gleichzeitig aktivem Ethernet und WLAN automatisch die Kabelverbindung
-(bessere Routing-Metrik) — ein zusätzlicher Schritt ist dafür nicht nötig.
-Ein aktiviertes, aber ungenutztes WLAN dient als Rückfalloption: Wird das
-Kabel versehentlich abgezogen oder gelöst, bleibt der Pi trotzdem über WLAN
-erreichbar, statt komplett vom Netz getrennt zu sein. **`sudo rfkill block
-wifi` wird deshalb nicht mehr empfohlen** — dieser Zustand übersteht Reboots
-(siehe Troubleshooting-Eintrag "Nach einem Neustart keine Verbindung mehr,
-WLAN tot") und kann genau die Situation verursachen, die er vermeiden sollte:
-kompletter Verbindungsverlust nach einem Neustart, sobald aus irgendeinem
-Grund kein Ethernet-Link mehr vorhanden ist. Falls WLAN aktuell blockiert
-ist: `sudo rfkill unblock wifi`.
+**Leave WLAN enabled while doing this, do not disable it.** When Ethernet
+and WLAN are active at the same time, Linux automatically prefers the wired
+connection (better routing metric) - no extra step is needed for that. An
+enabled but unused WLAN serves as a fallback: if the cable is accidentally
+unplugged or comes loose, the Pi stays reachable over WLAN instead of being
+completely cut off from the network. **`sudo rfkill block wifi` is therefore
+no longer recommended** - this state survives reboots (see the
+troubleshooting entry "No connection after a reboot, WLAN dead") and can
+cause exactly the situation it was meant to avoid: a complete loss of
+connectivity after a reboot as soon as no Ethernet link is present for any
+reason. If WLAN is currently blocked: `sudo rfkill unblock wifi`.
 
-#### Nach dem Speichern
+#### After Saving
 
 ```bash
 sudo reboot
 ```
 
-Nach dem Neustart erneut verbinden und prüfen, dass der Pi tatsächlich die
-reservierte Adresse hat (funktioniert unabhängig davon, ob WLAN oder
-Ethernet aktiv ist):
+After the reboot, connect again and check that the Pi actually has the
+reserved address (this works regardless of whether WLAN or Ethernet is
+active):
 
 ```bash
-ssh <benutzer>@pi-server.local
+ssh <username>@pi-server.local
 ip -4 addr show | grep inet
 ```
 
-Das Ergebnis muss die in `.env` eingetragene `PI_STATIC_IP` enthalten —
-falls nicht, `.env` entsprechend anpassen, bevor es mit Schritt 7 weitergeht.
+The result must contain the `PI_STATIC_IP` entered in `.env` - if not,
+adjust `.env` accordingly before continuing with step 7.
 
-### 7. Härtung: SSH key-only + Firewall Default-Deny
+### 7. Hardening: SSH Key-Only + Firewall Default-Deny
 
 ```bash
 bash scripts/01-harden.sh
 ```
 
-Das Skript bricht **mit Fehlermeldung ab**, falls unter
-`~/.ssh/authorized_keys` noch kein Public Key hinterlegt ist — das schützt
-davor, sich versehentlich selbst auszusperren.
+The script **aborts with an error message** if there is no public key yet
+under `~/.ssh/authorized_keys` - this protects you from accidentally locking
+yourself out.
 
-Verifizieren:
+Verify:
 
 ```bash
 sudo ufw status verbose
 ```
 
-Erwartet: `Default: deny (incoming), allow (outgoing)` und Regeln nur für
+Expected: `Default: deny (incoming), allow (outgoing)` and rules only for
 `${LAN_SUBNET}`.
 
-### 8. Cloudflare Tunnel einrichten (einmalig, im Dashboard)
+### 8. Set Up the Cloudflare Tunnel (One-Time, in the Dashboard)
 
-Das ist der einzige Schritt, der sich nicht per Kommandozeile automatisieren
-lässt (OAuth-geschützte Weboberfläche).
+This is the only step that cannot be automated on the command line (an
+OAuth-protected web interface).
 
-1. <https://one.dash.cloudflare.com> öffnen (ggf. Zero Trust kostenlos aktivieren).
-2. Links im Menü **Networks → Tunnels → Create a tunnel**.
-3. Connector-Typ **Cloudflared** wählen, Namen vergeben (z. B. `pi-server`).
-4. Bei "Choose your environment" auf **Docker** klicken. Es erscheint ein
-   Befehl wie:
+1. Open <https://one.dash.cloudflare.com> (activate Zero Trust for free if needed).
+2. In the left menu, **Networks -> Tunnels -> Create a tunnel**.
+3. Choose the connector type **Cloudflared**, give it a name (e.g. `pi-server`).
+4. Under "Choose your environment" click **Docker**. A command like this appears:
    ```
    docker run cloudflare/cloudflared:... tunnel --no-autoupdate run --token eyJhIjoi...
    ```
-   Nur den Teil nach `--token` kopieren (die lange Zeichenkette) — das ist
+   Copy only the part after `--token` (the long string) - that is
    `CLOUDFLARE_TUNNEL_TOKEN`.
-5. In `.env` eintragen:
+5. Enter it in `.env`:
    ```bash
    nano .env
-   # CLOUDFLARE_TUNNEL_TOKEN=<eingefügter Wert>
+   # CLOUDFLARE_TUNNEL_TOKEN=<pasted value>
    ```
-6. Im selben Tunnel-Setup (oder danach unter dem Tunnel → **Published
-   Application routes** → **Add published application**, aktuelle
-   Cloudflare-Bezeichnung, Stand 2026):
-   - **Subdomain**: leer lassen, außer eine Subdomain wie `www.` ist gewünscht
-   - **Domain**: der `DOMAIN`-Wert aus `.env`
-   - **Path**: leer lassen (matcht alles)
-   - **Service URL**: `http://caddy:80` — **nicht** `localhost`! `caddy` ist
-     der interne Docker-Servicename des Reverse Proxys aus
-     `docker-compose.yml`, nur für `cloudflared` im `edge`-Netzwerk
-     erreichbar; Port `80`, weil Caddy dort lauscht (kein Host-Port, siehe [M8]).
-   - **Add route** klicken.
+6. In the same tunnel setup (or afterwards under the tunnel -> **Published
+   Application routes** -> **Add published application**, current
+   Cloudflare wording as of 2026):
+   - **Subdomain**: leave empty, unless you want a subdomain like `www.`
+   - **Domain**: the `DOMAIN` value from `.env`
+   - **Path**: leave empty (matches everything)
+   - **Service URL**: `http://caddy:80` - **not** `localhost`! `caddy` is
+     the internal Docker service name of the reverse proxy from
+     `docker-compose.yml`, reachable only for `cloudflared` on the `edge`
+     network; port `80`, because that is where Caddy listens (no host port,
+     see [M8]).
+   - Click **Add route**.
 
-   > **Alle** öffentlichen Hostnamen (Hauptdomain und später jede Subdomain)
-   > zeigen auf **denselben** Service `http://caddy:80` — Caddy verteilt intern
-   > anhand des Hostnamens an die richtige Seite. Für jede weitere Subdomain
-   > wird hier später ein weiterer Public Hostname angelegt (siehe „Weitere
-   > Websites hosten"). Wildcard (`*.deine-domain.de`) geht auf dem kostenlosen
-   > Cloudflare-Plan nicht, daher pro Subdomain ein Eintrag.
+   > **All** public hostnames (the main domain and, later, every subdomain)
+   > point to the **same** service `http://caddy:80` - Caddy internally
+   > routes to the right site based on the hostname. Every additional
+   > subdomain gets its own additional public hostname created here later
+   > (see "Hosting Additional Websites"). A wildcard (`*.deine-domain.de`) is
+   > not available on the free Cloudflare plan, hence one entry per subdomain.
 
-### 9. Dienste starten
+### 9. Start the Services
 
 ```bash
-docker compose config   # Syntax-/Wertecheck
-docker compose up -d     # baut beim ersten Mal die Beispiel-App (app-example)
+docker compose config   # syntax/value check
+docker compose up -d     # builds the example app (app-example) the first time
 docker compose ps
 ```
 
-Alle Dienste sollten `running` sein (`pihole`, `caddy`, `app-example`,
-`cloudflared`, `uptime-kuma`). Beim ersten Start baut Docker das Image der
-Beispiel-App — das dauert einmalig ein bis zwei Minuten.
+All services should be `running` (`pihole`, `caddy`, `app-example`,
+`cloudflared`, `uptime-kuma`). On the first start, Docker builds the example
+app's image - that takes one to two minutes, once.
 
-### 10. Pi-hole als Netzwerk-DNS eintragen (Router, manuell)
+### 10. Set Pi-hole as the Network DNS (Router, Manual)
 
-- **Web-UI aufrufen:** `http://<PI_STATIC_IP>:<PORT_PIHOLE_UI>/admin/` — mit
-  den tatsächlichen Werten aus `.env`, z. B. `http://192.168.178.53:8080/admin/`.
-  Der Pfad **`/admin/` am Ende ist Pflicht** (Pi-hole v6 leitet von der
-  reinen IP/Port-Adresse nicht automatisch dorthin um). Login mit
-  `PIHOLE_PASSWORD`. Nur aus dem LAN erreichbar.
-- **Hinweis "Consider upgrading to HTTPS":** Diese Meldung zeigt Pi-hole
-  standardmäßig an, weil die Oberfläche per HTTP läuft. Unproblematisch für
-  dieses Setup, da die UI ohnehin nur aus dem LAN erreichbar ist (per
-  `ufw`-Regel abgesichert, siehe Schritt 7) — kann einfach ignoriert werden.
-  Wer möchte, kann in der Pi-hole-UI unter **Settings → Web Interface / API**
-  HTTPS mit einem selbstsignierten Zertifikat aktivieren; der Browser zeigt
-  dann allerdings eine Zertifikatswarnung, da das Zertifikat nicht von einer
-  öffentlichen Stelle ausgestellt ist.
-- **Pi-hole als DNS-Server für das gesamte Heimnetz eintragen** — bei einer
+- **Open the web UI:** `http://<PI_STATIC_IP>:<PORT_PIHOLE_UI>/admin/` -
+  using the actual values from `.env`, e.g. `http://192.168.178.53:8080/admin/`.
+  The **trailing `/admin/` is mandatory** (Pi-hole v6 does not automatically
+  redirect there from the plain IP/port address). Log in with
+  `PIHOLE_PASSWORD`. Reachable only from the LAN.
+- **The "Consider upgrading to HTTPS" notice:** Pi-hole shows this message
+  by default because the interface runs over HTTP. Not a problem for this
+  setup, since the UI is reachable only from the LAN anyway (secured by a
+  `ufw` rule, see step 7) - it can simply be ignored. If you want, you can
+  enable HTTPS with a self-signed certificate in the Pi-hole UI under
+  **Settings -> Web Interface / API**; the browser will then show a
+  certificate warning, though, since the certificate was not issued by a
+  public authority.
+- **Set Pi-hole as the DNS server for the whole home network** - on a
   FRITZ!Box:
-  1. **Heimnetz → Netzwerk → Netzwerkeinstellungen**.
-  2. Ggf. auf **"Weitere Einstellungen anzeigen"** klicken, damit alle
-     Felder sichtbar sind.
-  3. Im Abschnitt zur **IPv4-Konfiguration** das Feld **"Lokaler
-     DNS-Server"** suchen und dort `PI_STATIC_IP` eintragen (z. B.
-     `192.168.178.53`).
-  4. **Übernehmen** klicken. Ab jetzt bekommt jedes Gerät, das per DHCP eine
-     Adresse von der FRITZ!Box erhält, automatisch Pi-hole als DNS-Server
-     zugewiesen.
+  1. **Home Network -> Network -> Network Settings**.
+  2. If needed, click **"Show more settings"** so all fields are visible.
+  3. In the **IPv4 configuration** section, find the field **"Local DNS
+     server"** and enter `PI_STATIC_IP` there (e.g. `192.168.178.53`).
+  4. Click **Apply**. From now on, every device that receives an address via
+     DHCP from the FRITZ!Box is automatically assigned Pi-hole as its DNS
+     server.
 
-  **Nicht verwechseln:** Das ist ein anderes Feld als **"MyFRITZ!/DynDNS"**
-  (dient dazu, die FRITZ!Box selbst über einen festen Namen aus dem
-  *Internet* erreichbar zu machen — das Gegenteil von dem, was hier gebraucht
-  wird) und auch ein anderes als der DNS-Server unter **Internet →
-  Zugangsart → DNS-Server** (das betrifft nur, welchen DNS-Server die
-  FRITZ!Box selbst nach außen hin befragt, nicht was den Geräten im LAN per
-  DHCP mitgeteilt wird). Bei anderen Routern heißt das gesuchte Feld meist
-  einfach **"DNS-Server"** in den generellen Netzwerk-/LAN-Einstellungen.
+  **Do not confuse this with:** this is a different field than
+  **"MyFRITZ!/DynDNS"** (used to make the FRITZ!Box itself reachable under a
+  fixed name from the *internet* - the opposite of what is needed here) and
+  also different from the DNS server under **Internet -> Access Type ->
+  DNS Server** (that only affects which DNS server the FRITZ!Box itself
+  queries externally, not what is handed to devices in the LAN via DHCP).
+  On other routers, the field you want is usually just called **"DNS
+  server"** in the general network/LAN settings.
 
-#### Prüfen, ob es funktioniert
+#### Checking That It Works
 
-Direkt nach dem Ändern zeigt das Pi-hole-Dashboard meist **`0 q/min`** an —
-das ist normal und kein Fehler: Geräte übernehmen den neuen DNS-Server erst
-bei der nächsten DHCP-Erneuerung, nicht sofort.
+Right after making the change, the Pi-hole dashboard usually shows
+**`0 q/min`** - that is normal and not an error: devices only pick up the new
+DNS server at their next DHCP renewal, not immediately.
 
-**Schnelltest, unabhängig von DHCP** (funktioniert sofort, von jedem Gerät im LAN oder auf dem Pi selbst):
-
-```bash
-nslookup doubleclick.net 192.168.178.53   # PI_STATIC_IP statt Beispiel-IP einsetzen
-```
-
-Kommt ein Ergebnis zurück (auch `0.0.0.0` zählt — das ist ein Block), läuft
-Pi-hole korrekt. Direkt danach im Pi-hole-Dashboard bzw. **Query Log**
-nachsehen — die eine Anfrage sollte dort auftauchen.
-
-**Damit reale Geräte Pi-hole tatsächlich nutzen**, muss deren DHCP-Lease
-erneuert werden:
-- Am einfachsten: FRITZ!Box einmal neu starten — erzwingt bei allen Geräten
-  eine neue Anfrage.
-- Pro Gerät: WLAN kurz aus-/einschalten (Handy) bzw. `ipconfig /release &&
-  ipconfig /renew` (Windows) oder neu verbinden (Mac/Linux).
-
-**Prüfen, welchen DNS-Server ein Gerät gerade tatsächlich verwendet:**
-Windows `ipconfig /all` (Feld "DNS-Server"), Mac Systemeinstellungen →
-Netzwerk → WLAN → Details → DNS, Linux `resolvectl status`, Smartphone in
-den WLAN-Netzwerkdetails.
-
-### 11. Öffentliche Webseite prüfen
+**Quick test, independent of DHCP** (works immediately, from any device on
+the LAN or on the Pi itself):
 
 ```bash
-curl -I https://deine-domain.de   # <- eigene Domain aus .env einsetzen
+nslookup doubleclick.net 192.168.178.53   # substitute PI_STATIC_IP for the example IP
 ```
 
-Erwartet: `HTTP/2 200`. `caddy` selbst hat **keinen** Host-Port — die einzige
-Route dorthin führt über `cloudflared`.
+If you get a result back (even `0.0.0.0` counts - that is a block), Pi-hole
+is working correctly. Right after that, check the Pi-hole dashboard /
+**Query Log** - that one request should show up there.
 
-### 12. Uptime Kuma einrichten
+**For real devices to actually use Pi-hole**, their DHCP lease has to be
+renewed:
+- Easiest: restart the FRITZ!Box once - this forces a new request from every
+  device.
+- Per device: toggle WLAN off/on briefly (phone), or run `ipconfig /release
+  && ipconfig /renew` (Windows), or reconnect (Mac/Linux).
 
-- Web-UI: `http://<PI_STATIC_IP>:3001` (nur LAN), z. B.
+**Checking which DNS server a device is actually using right now:**
+Windows `ipconfig /all` (the "DNS Servers" field), Mac System Settings ->
+Network -> WLAN -> Details -> DNS, Linux `resolvectl status`, on a
+smartphone under the WLAN network details.
+
+### 11. Check the Public Website
+
+```bash
+curl -I https://deine-domain.de   # <- substitute your own domain from .env
+```
+
+Expected: `HTTP/2 200`. `caddy` itself has **no** host port - the only route
+to it goes through `cloudflared`.
+
+### 12. Set Up Uptime Kuma
+
+- Web UI: `http://<PI_STATIC_IP>:3001` (LAN only), e.g.
   `http://192.168.178.53:3001`.
-- Beim ersten Aufruf fragt Uptime Kuma **"Welche Datenbank möchtest du
-  verwenden?"** (Embedded MariaDB / MariaDB-MySQL / SQLite) →
-  **SQLite** wählen. Begründung: Embedded MariaDB startet einen kompletten
-  Datenbankserver im Container mit (dauerhaft mehr RAM-Verbrauch auf dem
-  ohnehin geteilten Pi, und es gibt Berichte über Start-Schleifen); der
-  Performance-Vorteil zählt erst bei sehr vielen Monitoren. SQLite ist eine
-  einzelne Datei in `data/uptime-kuma/`, die das nächtliche Backup sauber
-  mitsichert. "MariaDB/MySQL" (extern) scheidet aus — es gibt in diesem
-  Setup keinen separaten Datenbankserver.
-- Danach Admin-Account anlegen.
-- Monitore anlegen für:
-  - Die öffentliche Webseite: `https://deine-domain.de`
-  - **Pi-hole: `http://pihole/admin/`** (nicht die LAN-IP!) — Uptime Kuma
-    und Pi-hole laufen im selben Docker-Netz `lan_net` und erreichen sich
-    dort direkt über den Servicenamen `pihole` (Port 80 intern). Über die
-    LAN-IP (`http://<PI_STATIC_IP>:8080/admin/`) kann der Monitor
-    fälschlicherweise in einen Timeout laufen — ein Container, der den
-    eigenen host-published Port über die Bridge anspricht, kann an Dockers
-    NAT-"Hairpin"-Limitation scheitern, obwohl die Seite im Browser von
-    jedem echten LAN-Gerät aus normal erreichbar ist.
-  - Ein Internet-Referenz-Check, z. B. `1.1.1.1`.
+- On the first visit, Uptime Kuma asks **"Which database do you want to
+  use?"** (embedded MariaDB / MariaDB-MySQL / SQLite) -> choose **SQLite**.
+  Reasoning: embedded MariaDB starts a whole database server inside the
+  container (permanently higher RAM usage on the already-shared Pi, and
+  there are reports of restart loops); its performance advantage only
+  matters once you have a lot of monitors. SQLite is a single file in
+  `data/uptime-kuma/`, which the nightly backup covers cleanly. "external
+  MariaDB/MySQL" is not an option - this setup has no separate database
+  server.
+- Then create the admin account.
+- Create monitors for:
+  - The public website: `https://deine-domain.de`
+  - **Pi-hole: `http://pihole/admin/`** (not the LAN IP!) - Uptime Kuma and
+    Pi-hole run on the same Docker network `lan_net` and reach each other
+    directly via the service name `pihole` (port 80 internally). Over the
+    LAN IP (`http://<PI_STATIC_IP>:8080/admin/`), the monitor can incorrectly
+    run into a timeout - a container that addresses its own host-published
+    port over the bridge can fall foul of Docker's NAT "hairpin" limitation,
+    even though the site loads normally in a browser from any real LAN
+    device.
+  - An internet reference check, e.g. `1.1.1.1`.
 
-### 13. Backup-Ziel verbinden (rclone, interaktiv)
+### 13. Connect the Backup Target (rclone, Interactive)
 
-Der Remote-Name muss zum Präfix von `BACKUP_REMOTE` in `.env` passen
-(Default: `onedrive`).
+The remote name must match the prefix of `BACKUP_REMOTE` in `.env` (default:
+`onedrive`).
 
 ```bash
 rclone config
 ```
 
-Im interaktiven Menü (Beispiel für OneDrive):
+In the interactive menu (example for OneDrive):
 
-1. `n` (New remote) → Name eingeben, z. B. `onedrive` (muss zu `BACKUP_REMOTE` passen)
-2. Storage-Typ aus der Liste wählen: **Microsoft OneDrive**
-3. `client_id` / `client_secret`: leer lassen (Enter)
-4. "Edit advanced config?" → `n`
-5. "Use web browser to automatically authenticate?" → `y`, falls der Pi
-   eine grafische Oberfläche/Browser-Weiterleitung erlaubt. Bei einem
-   headless Pi (Standardfall): `n` wählen und stattdessen auf einem Gerät
-   mit Browser `rclone authorize "onedrive"` ausführen, den Code zurück ins
-   Terminal auf dem Pi einfügen (das Setup fragt danach).
-6. Laufwerk aus der Liste bestätigen (meist `0`), dann `y`.
-7. `q` zum Beenden.
+1. `n` (New remote) -> enter a name, e.g. `onedrive` (must match `BACKUP_REMOTE`)
+2. Choose the storage type from the list: **Microsoft OneDrive**
+3. `client_id` / `client_secret`: leave empty (Enter)
+4. "Edit advanced config?" -> `n`
+5. "Use web browser to automatically authenticate?" -> `y`, if the Pi allows
+   a graphical interface/browser redirect. On a headless Pi (the standard
+   case): choose `n` and instead run `rclone authorize "onedrive"` on a
+   device with a browser, then paste the resulting code back into the
+   terminal on the Pi (the setup will prompt for it).
+6. Confirm the drive from the list (usually `0`), then `y`.
+7. `q` to quit.
 
-Testen (mit dem eben vergebenen Remote-Namen):
+Test it (with the remote name you just set):
 
 ```bash
 rclone lsd onedrive:
 ```
 
-### 14. Backup ausführen und automatisieren
+### 14. Run the Backup and Automate It
 
-Manuell testen — **hier ausnahmsweise mit `sudo`**, weil die Dateien unter
-`data/` den Container-Nutzern gehören und nur root sie vollständig lesen
-kann (der Upload per rclone läuft trotzdem automatisch unter deinem
-normalen Nutzer, damit deine rclone-Anmeldung verwendet wird):
+Test it manually - **an exception where `sudo` is used here**, because the
+files under `data/` belong to the container users and only root can read all
+of them (the upload via rclone still runs automatically as your normal user,
+so that your rclone login is used):
 
 ```bash
 sudo bash scripts/backup.sh
 ```
 
-Als nächtlichen Cron-Job einrichten (landet aus demselben Grund in der
-root-crontab; idempotent — mehrfaches Ausführen legt den Eintrag nicht
-doppelt an):
+Set it up as a nightly cron job (it lands in root's crontab for the same
+reason; idempotent - running it multiple times does not create duplicate
+entries):
 
 ```bash
 bash scripts/install-backup-cron.sh
 ```
 
-**Wichtig, einmalig:** Der private age-Schlüssel
-(`~/.config/age/pi-server.txt`) wird **nicht** mitgesichert — ohne ihn sind
-alle Backups wertlos. Jetzt an einen sicheren Ort außerhalb des Pi kopieren
-(Passwort-Manager, USB-Stick), falls noch nicht geschehen.
+**Important, one time only:** the private age key
+(`~/.config/age/pi-server.txt`) is **not** included in the backup itself -
+without it, all backups are worthless. Copy it now to a safe place outside
+the Pi (password manager, USB drive), if you have not done so already.
 
-### 15. Alles auf einmal verifizieren
+### 15. Verify Everything at Once
 
 ```bash
 bash scripts/verify.sh
 ```
 
-Prüft: `docker compose config`, alle Dienste laufen, keine Secrets im Git,
-`ufw` Default-Deny aktiv, öffentliche Domain erreichbar, `PI_STATIC_IP`
-tatsächlich an einem aktiven Interface gebunden, WLAN nicht blockiert
-während kein Ethernet aktiv ist — mit PASS/FAIL-Ausgabe pro Check.
+Checks: `docker compose config`, all services running, no secrets in git,
+`ufw` default-deny active, public domain reachable, `PI_STATIC_IP` actually
+bound to an active interface, WLAN not blocked while no Ethernet is active -
+with PASS/FAIL output per check.
 
-### 16. Restore einmal real testen (Pflicht, [M7])
+### 16. Do a Real Restore Test Once (Mandatory, [M7])
 
-Vor Abschluss des Setups **einmal auf einem leeren/frischen System einen
-echten Restore durchführen**: neues Boot-Medium flashen, Repo klonen,
-`00-bootstrap.sh` + `01-harden.sh` ausführen, den privaten age-Schlüssel und
-die `rclone`-Verbindung auf dem neuen System einrichten, neuestes Backup aus
-`BACKUP_REMOTE` holen und mit `age -d` entschlüsseln, `data/` und `.env`
-wiederherstellen, dann `docker compose up -d` und `scripts/verify.sh`. Details
-zum genauen Ablauf stehen in den Kommentaren von `scripts/backup.sh`.
+Before considering the setup complete, **do one real restore on an empty/
+fresh system**: flash a new boot medium, clone the repo, run
+`00-bootstrap.sh` + `01-harden.sh`, set up the private age key and the
+`rclone` connection on the new system, fetch the latest backup from
+`BACKUP_REMOTE` and decrypt it with `age -d`, restore `data/` and `.env`,
+then run `docker compose up -d` and `scripts/verify.sh`. The exact procedure
+is documented in the comments of `scripts/backup.sh`.
 
 ---
 
 ## Troubleshooting
 
-| Symptom | Wahrscheinliche Ursache | Prüfen / Fix |
+| Symptom | Likely cause | Check / fix |
 |---|---|---|
-| `docker compose ps` zeigt `cloudflared` nicht `running` | Token falsch/leer | `docker compose logs cloudflared`; Token in `.env` neu aus dem Dashboard kopieren |
-| `curl -I https://${DOMAIN}` liefert Fehler/Timeout | Published-Application-Routing fehlt oder DNS noch nicht propagiert | Im Zero-Trust-Dashboard die Route prüfen; einige Minuten warten |
-| Pi-hole-UI unter `PI_STATIC_IP` nicht erreichbar | `PI_STATIC_IP` stimmt nicht mit tatsächlicher Pi-IP überein, oder `ufw`-Regel fehlt | `ip -4 addr show` auf dem Pi vs. `.env` vergleichen; `sudo ufw status verbose` |
-| Geräte im LAN nutzen Pi-hole nicht als DNS | Router-DNS-Einstellung noch nicht gesetzt oder Geräte-Cache | Router-DNS-Setting prüfen (Schnellstart Schritt 10); betroffenes Gerät neu verbinden |
-| `scripts/01-harden.sh` bricht mit Fehler ab | Kein Public Key in `~/.ssh/authorized_keys` | Key wie in Schnellstart Schritt 1 hinterlegen, dann erneut ausführen |
-| `scripts/backup.sh` schlägt bei `rclone` fehl | Remote nicht konfiguriert oder Name stimmt nicht mit `BACKUP_REMOTE` überein. Wichtig: `rclone config` als normaler Nutzer ausführen (nicht mit sudo) — das Backup nutzt automatisch dessen Konfiguration | `rclone listremotes` (ohne sudo); Schnellstart Schritt 13 wiederholen |
-| `-bash: git: command not found` beim Klonen | Raspberry Pi OS Lite hat `git` nicht vorinstalliert, `00-bootstrap.sh` (installiert es) läuft erst nach dem Klonen | `sudo apt update && sudo apt install -y git`, dann erneut klonen (Schnellstart Schritt 3) |
-| `git pull` in `sites/<name>` meldet `Already up to date`, aber die Seite zeigt weiter alte Inhalte | `sites/<name>` ist kein eigenes Git-Repo, sondern liegt noch im Haupt-Repo (häufig bei `sites/main`, wenn die mitgelieferte Beispielseite direkt durch die echte Homepage ersetzt wurde) — `git pull` löst sich dann gegen das Haupt-Repo auf, nicht gegen die eigentliche Website | `git remote -v` in `sites/<name>` prüfen: zeigt es das Haupt-Repo statt der Website? → `bash scripts/adopt-site-repo.sh sites/<name> <echte-repo-url>` (siehe „Jede Seite als eigenes Git-Repo") |
-| Nach Reboot nicht mehr unter der reservierten IP erreichbar | Router-Reservierung hängt an der MAC-Adresse des **falschen** Interfaces (z. B. `eth0` reserviert, Pi hängt aber an `wlan0`, oder umgekehrt) | `ip -4 addr show` auf dem Pi, aktives Interface ermitteln, MAC damit im Router abgleichen (Schnellstart Schritt 6) |
-| `ufw`-Regeln passen nicht zum tatsächlichen LAN | `LAN_SUBNET` in `.env` enthält eine Host-Adresse statt der Netz-Adresse (z. B. `192.168.178.53/24` statt `192.168.178.0/24`) | `grep LAN_SUBNET .env` prüfen, bei Bedarf korrigieren, `scripts/01-harden.sh` erneut ausführen |
-| Cloudflare-Dashboard zeigt keinen Menüpunkt "Public Hostname" | Cloudflare hat die Bezeichnung zu "Published Application routes" / "Add published application" geändert (Stand 2026) | Im Tunnel-Detail nach **Published Application routes** suchen, Felder wie in Schnellstart Schritt 8 ausfüllen |
-| Pi-hole-Dashboard zeigt dauerhaft `0 q/min` nach Umstellung des Router-DNS | Geräte haben ihre DHCP-Lease noch nicht erneuert, nutzen also noch den alten DNS-Server | Schnelltest per `nslookup <domain> ${PI_STATIC_IP}`; für echte Geräte Router neu starten oder Lease einzeln erneuern (Schnellstart Schritt 10) |
-| Nach einem Neustart keine Verbindung mehr, WLAN tot (auch über lokale Konsole als "nicht verbunden" sichtbar) | Häufigste Ursache: WLAN wurde per `rfkill block wifi` deaktiviert (z. B. beim Umstieg auf ein LAN-Kabel) — dieser Zustand übersteht Neustarts. Fehlt dann zusätzlich ein aktiver Ethernet-Link, hat der Pi gar keine Netzwerkverbindung mehr | Per Tastatur/Monitor lokal einloggen, `rfkill list` prüfen; steht dort "Soft blocked: yes" bei WLAN → `sudo rfkill unblock wifi`. WLAN danach nicht erneut blockieren (siehe Hinweis in Schnellstart Schritt 6) |
-| Pi unter `PI_STATIC_IP` komplett unerreichbar, DNS für das ganze LAN fällt aus | Physische Ethernet-Verbindung getrennt (Kabel raus/lose) — `eth0` hat dann gar keine IP mehr, der Pi kann parallel per DHCP auf `wlan0` ausweichen und landet auf einer völlig anderen Adresse | `ip link` auf dem Pi: Zeigt `eth0` "NO-CARRIER"/"state DOWN"? → Kabel/Port prüfen. Bevor man DNS/Software verdächtigt: immer zuerst die physische Verbindung prüfen (`ip link`, `dmesg`), das sieht sonst wie ein reines DNS-Problem aus |
-| Pi-hole läuft (`healthy`), Port 53 ist erreichbar, aber echte Geräte im LAN bekommen trotzdem keine Antwort | Pi-hole v6 verwendet standardmäßig `dns.listeningMode=LOCAL`. In einem Docker-Bridge-Netz hält FTL dabei nur Anfragen aus dem eigenen Bridge-Subnetz für "lokal" und verwirft echte LAN-Clients stillschweigend | Pi-hole-Log auf "ignoring query from non-local network ..." prüfen; `FTLCONF_dns_listeningMode: "ALL"` ist bereits in `docker-compose.yml` gesetzt (siehe Kommentar dort) — bei älteren Ständen dieses Repos ggf. nachtragen und `docker compose up -d` erneut ausführen |
-| `docker compose ps` zeigte vor einer Weile "running", Problem besteht aber weiter | Status kann veraltet sein — Container können zwischenzeitlich abgestürzt/neu gestartet sein | `docker compose ps` **live neu ausführen**, nicht auf einen älteren Blick verlassen, bevor man weiter nach der Ursache sucht |
-| DNS-Test von einem Test-Container auf demselben Docker-Bridge-Netz schlägt fehl, obwohl von echten LAN-Geräten aus alles funktioniert | Docker-NAT-"Hairpin"-Limitation: ein Container, der den eigenen host-published Port über die Bridge anspricht, kann daran scheitern — sieht wie ein Bug aus, ist aber eine bekannte Docker-Eigenheit | Zum Testen immer von einem echten LAN-Client oder direkt vom Host aus prüfen (`nslookup <domain> ${PI_STATIC_IP}`), nicht von einem anderen Container auf derselben Bridge |
-| Uptime-Kuma-Monitor für Pi-hole zeigt "timeout of Nms exceeded", obwohl `http://<PI_STATIC_IP>:8080/admin/` im Browser normal lädt | Dieselbe Docker-NAT-Hairpin-Limitation: Uptime Kuma ist selbst ein Container und scheitert daran, den eigenen host-published Port von Pi-hole über die LAN-IP anzusprechen | Monitor-URL auf `http://pihole/admin/` ändern (interner Servicename statt LAN-IP, siehe Schnellstart Schritt 12) |
-| Login einer App gelingt scheinbar, der Nutzer landet aber sofort wieder auf `/login` | `cloudflared` spricht Klartext-HTTP mit `caddy:80`, Caddy setzt daher `X-Forwarded-Proto: http`. Frameworks mit Secure-Cookies (z. B. `express-session` mit `cookie.secure=true` hinter `trust proxy`) verwerfen das Session-Cookie dann **stillschweigend** — kein Fehler im Log, nur ein `debug()`-Aufruf | Im `reverse_proxy`-Block der App `header_up X-Forwarded-Proto https` ergänzen (Vorlage im Kommentar über dem `@app`-Block in `config/caddy/Caddyfile`), dann `docker compose restart caddy` |
-| Nur die **erste** `admin: yes`-Seite aus `sites.conf` wird geseedet, alle weiteren fehlen | Bekannter, behobener Fehler in älteren Ständen von `scripts/deploy.sh`: `docker compose exec` hängt stdin immer an den Container (`-T` schaltet nur das TTY ab) und las im Schleifenkörper die offene `sites.conf` bis EOF leer | `git pull` — der Fix (`< /dev/null` am exec plus Manifest-Lesen über FD 3) ist enthalten. Fehlende Admins einmalig nachziehen: `docker compose exec -T <dienst> npm run seed:admin < /dev/null` |
+| `docker compose ps` shows `cloudflared` as not `running` | Token wrong/empty | `docker compose logs cloudflared`; copy the token fresh from the dashboard into `.env` |
+| `curl -I https://${DOMAIN}` returns an error/timeout | Published-application routing missing, or DNS not propagated yet | Check the route in the Zero Trust dashboard; wait a few minutes |
+| Pi-hole UI not reachable at `PI_STATIC_IP` | `PI_STATIC_IP` does not match the Pi's actual IP, or a `ufw` rule is missing | Compare `ip -4 addr show` on the Pi against `.env`; `sudo ufw status verbose` |
+| Devices on the LAN are not using Pi-hole as DNS | Router DNS setting not set yet, or device cache | Check the router DNS setting (Quick Start step 10); reconnect the affected device |
+| `scripts/01-harden.sh` aborts with an error | No public key in `~/.ssh/authorized_keys` | Add the key as in Quick Start step 1, then run it again |
+| `scripts/backup.sh` fails at `rclone` | Remote not configured, or its name does not match `BACKUP_REMOTE`. Important: run `rclone config` as a normal user (not with sudo) - the backup automatically uses that user's configuration | `rclone listremotes` (without sudo); repeat Quick Start step 13 |
+| `-bash: git: command not found` while cloning | Raspberry Pi OS Lite does not have `git` preinstalled, and `00-bootstrap.sh` (which installs it) only runs after cloning | `sudo apt update && sudo apt install -y git`, then clone again (Quick Start step 3) |
+| `git pull` in `sites/<name>` reports `Already up to date`, but the site still shows old content | `sites/<name>` is not its own Git repo but still lives inside the main repo (common with `sites/main` when the bundled example site was replaced directly with the real homepage) - `git pull` then resolves against the main repo, not the actual website | Check `git remote -v` in `sites/<name>`: does it show the main repo instead of the website? -> `bash scripts/adopt-site-repo.sh sites/<name> <real-repo-url>` (see "Each Site as Its Own Git Repo") |
+| No longer reachable at the reserved IP after a reboot | The router reservation is tied to the MAC address of the **wrong** interface (e.g. `eth0` reserved, but the Pi is connected via `wlan0`, or vice versa) | `ip -4 addr show` on the Pi, determine the active interface, match its MAC in the router (Quick Start step 6) |
+| `ufw` rules do not match the actual LAN | `LAN_SUBNET` in `.env` contains a host address instead of the network address (e.g. `192.168.178.53/24` instead of `192.168.178.0/24`) | Check `grep LAN_SUBNET .env`, correct if needed, run `scripts/01-harden.sh` again |
+| The Cloudflare dashboard shows no "Public Hostname" menu item | Cloudflare renamed it to "Published Application routes" / "Add published application" (as of 2026) | Look for **Published Application routes** in the tunnel detail view, fill in the fields as in Quick Start step 8 |
+| The Pi-hole dashboard permanently shows `0 q/min` after changing the router DNS | Devices have not renewed their DHCP lease yet, so they are still using the old DNS server | Quick test via `nslookup <domain> ${PI_STATIC_IP}`; for real devices, restart the router or renew the lease individually (Quick Start step 10) |
+| No connection after a reboot, WLAN dead (also shows as "not connected" via the local console) | Most common cause: WLAN was disabled via `rfkill block wifi` (e.g. when switching to a LAN cable) - this state survives reboots. If an active Ethernet link is also missing, the Pi has no network connection at all | Log in locally via keyboard/monitor, check `rfkill list`; if it shows "Soft blocked: yes" for WLAN -> `sudo rfkill unblock wifi`. Do not block WLAN again afterwards (see the note in Quick Start step 6) |
+| Pi completely unreachable at `PI_STATIC_IP`, DNS fails for the whole LAN | The physical Ethernet connection is disconnected (cable unplugged/loose) - `eth0` then has no IP at all, and the Pi can fall back to DHCP on `wlan0` in parallel, ending up on a completely different address | `ip link` on the Pi: does `eth0` show "NO-CARRIER"/"state DOWN"? -> check the cable/port. Before suspecting DNS/software: always check the physical connection first (`ip link`, `dmesg`), otherwise this looks exactly like a pure DNS problem |
+| Pi-hole is running (`healthy`), port 53 is reachable, but real devices on the LAN still get no answer | Pi-hole v6 defaults to `dns.listeningMode=LOCAL`. In a Docker bridge network, FTL then only considers queries from its own bridge subnet "local" and silently drops real LAN clients | Check the Pi-hole log for "ignoring query from non-local network ..."; `FTLCONF_dns_listeningMode: "ALL"` is already set in `docker-compose.yml` (see the comment there) - on older checkouts of this repo, add it if missing and run `docker compose up -d` again |
+| `docker compose ps` showed "running" a while ago, but the problem persists | The status can be stale - containers may have crashed/restarted in the meantime | **Re-run `docker compose ps` live**, do not rely on an older glance, before continuing to look for the cause |
+| A DNS test from a test container on the same Docker bridge network fails, even though everything works fine from real LAN devices | Docker NAT "hairpin" limitation: a container that addresses its own host-published port over the bridge can fail here - looks like a bug but is a known Docker quirk | Always test from a real LAN client or directly from the host (`nslookup <domain> ${PI_STATIC_IP}`), not from another container on the same bridge |
+| The Uptime Kuma monitor for Pi-hole shows "timeout of Nms exceeded", even though `http://<PI_STATIC_IP>:8080/admin/` loads fine in a browser | Same Docker NAT hairpin limitation: Uptime Kuma is itself a container and fails to reach Pi-hole's own host-published port over the LAN IP | Change the monitor URL to `http://pihole/admin/` (internal service name instead of LAN IP, see Quick Start step 12) |
+| Logging into an app seems to succeed, but the user immediately lands back on `/login` | `cloudflared` speaks plain HTTP to `caddy:80`, so Caddy sets `X-Forwarded-Proto: http`. Frameworks with secure cookies (e.g. `express-session` with `cookie.secure=true` behind `trust proxy`) then **silently** drop the session cookie - no error in the log, just a `debug()` call | Add `header_up X-Forwarded-Proto https` to the app's `reverse_proxy` block (template in the comment above the `@app` block in `config/caddy/Caddyfile`), then `docker compose restart caddy` |
+| Only the **first** `admin: yes` site from `sites.conf` gets seeded, all others are missing | Known, fixed bug in older versions of `scripts/deploy.sh`: `docker compose exec` always attaches stdin to the container (`-T` only disables the TTY), and inside the loop body it read the still-open `sites.conf` down to EOF, leaving it empty | `git pull` - the fix (`< /dev/null` on the exec, plus reading the manifest via FD 3) is included. Seed missing admins once manually: `docker compose exec -T <service> npm run seed:admin < /dev/null` |
 
-**Vorsicht beim Live-Debugging von DNS-Problemen:** keinen zweiten,
-unkonfigurierten Pi-hole-Testcontainer per `docker run --network host
-pihole/...` starten, während der eigentliche Dienst bereits Port 53 belegt —
-das konkurriert unnötig um denselben Port. Stattdessen direkt vom Host aus
-mit `nslookup`/`dig` gegen `${PI_STATIC_IP}` testen.
+**Caution when live-debugging DNS issues:** do not start a second,
+unconfigured Pi-hole test container via `docker run --network host
+pihole/...` while the real service already holds port 53 - that needlessly
+competes for the same port. Instead, test directly from the host with
+`nslookup`/`dig` against `${PI_STATIC_IP}`.
 
 ---
 
-## Was kann ich mit Pi-hole eigentlich machen?
+## What Can I Actually Do With Pi-hole?
 
-Ein kurzer Überblick über die gängigsten Aufgaben in der Pi-hole-Weboberfläche
+A quick overview of the most common tasks in the Pi-hole web interface
 (`http://${PI_STATIC_IP}:${PORT_PIHOLE_UI}/admin/`):
 
-- **Query Log** (Menü links): zeigt in Echtzeit jede DNS-Anfrage aus dem
-  Netzwerk und ob sie geblockt oder durchgelassen wurde — der schnellste Weg
-  herauszufinden, welche Domain gerade etwas blockiert.
-- **Werbung/Tracker blockieren:** läuft größtenteils automatisch über die
-  mitgelieferten Blocklisten (Adlists). Weitere Listen unter
-  **Settings → Adlists** hinzufügen, danach **Tools → Update Gravity**
-  ausführen, damit sie aktiv werden.
-- **Eine bestimmte Domain gezielt blockieren:** unter **Domains** die Domain
-  im Reiter **Blacklist (Exact/Wildcard)** eintragen — oder direkt aus dem
-  Query Log per Klick auf die Domain und "Blacklist".
-- **Eine Seite freigeben, die durch Pi-hole kaputtgeht:** passiert gelegentlich,
-  wenn eine Webseite Inhalte/Skripte über dieselbe Domain wie eine
-  Tracking-/Werbe-Domain lädt. Unter **Domains → Whitelist** die betroffene
-  Domain eintragen (Query Log verrät meist, welche Domain gerade blockiert
-  wurde) — danach lädt die Seite wieder normal.
-- **Pi-hole kurz komplett deaktivieren** (zum Testen, ob Pi-hole die Ursache
-  eines Problems ist): auf dem Dashboard oben der Schalter "Disable" mit
-  Zeitlimit (z. B. 5 Minuten) oder dauerhaft, danach wieder "Enable".
-  Praktisch, um schnell auszuschließen, dass Pi-hole für ein Problem
-  verantwortlich ist.
-- **Gruppen/Geräte unterschiedlich behandeln:** unter **Group Management**
-  lassen sich z. B. strengere Regeln für Kinder-Geräte oder lockerere für
-  Gäste-WLAN einrichten und einzelnen Clients zuweisen.
-- **Statistiken:** das Dashboard zeigt u. a. die am häufigsten geblockten
-  Domains und den Anteil geblockter Anfragen am Gesamtverkehr.
+- **Query Log** (left menu): shows every DNS request from the network in
+  real time and whether it was blocked or let through - the fastest way to
+  find out which domain is currently blocking something.
+- **Blocking ads/trackers:** mostly runs automatically via the bundled
+  blocklists (adlists). Add more lists under **Settings -> Adlists**, then
+  run **Tools -> Update Gravity** to make them active.
+- **Blocking a specific domain deliberately:** enter the domain under
+  **Domains** in the **Blacklist (Exact/Wildcard)** tab - or directly from
+  the Query Log by clicking the domain and "Blacklist".
+- **Unblocking a site broken by Pi-hole:** happens occasionally when a
+  website loads content/scripts from the same domain as a tracking/ad
+  domain. Enter the affected domain under **Domains -> Whitelist** (the
+  Query Log usually reveals which domain is currently being blocked) - the
+  site then loads normally again.
+- **Disabling Pi-hole briefly, completely** (to test whether Pi-hole is the
+  cause of a problem): use the "Disable" switch at the top of the dashboard,
+  with a time limit (e.g. 5 minutes) or permanently, then "Enable" again.
+  Handy for quickly ruling out Pi-hole as the culprit for a problem.
+- **Treating groups/devices differently:** under **Group Management** you
+  can, for example, set up stricter rules for children's devices or looser
+  ones for guest WLAN, and assign them to individual clients.
+- **Statistics:** the dashboard shows, among other things, the
+  most-frequently-blocked domains and the share of blocked requests in total
+  traffic.
 
 ---
 
-## Weitere Websites hosten
+## Hosting Additional Websites
 
-Der Reverse Proxy **Caddy** liefert alle Websites aus. `cloudflared` schickt
-jeden Hostnamen an `caddy:80`, und Caddy entscheidet anhand der (Sub-)Domain,
-was ausgeliefert wird — Routing steht in `config/caddy/Caddyfile`.
+The reverse proxy **Caddy** serves all websites. `cloudflared` sends every
+hostname to `caddy:80`, and Caddy decides based on the (sub)domain what gets
+served - routing lives in `config/caddy/Caddyfile`.
 
-Es gibt zwei Arten von Seiten:
+There are two kinds of sites:
 
-| | **Statische Seite** | **Dynamische App** |
+| | **Static site** | **Dynamic app** |
 |---|---|---|
-| Was | HTML/CSS/JS, fertige Dateien | Laufendes Programm (Node, Python, …) |
-| Wo | Ordner unter `sites/<name>/` | Ordner unter `apps/<name>/` (mit `Dockerfile`) |
-| Wie ausgeliefert | Caddy liefert die Dateien direkt | Eigener Container, Caddy leitet per `reverse_proxy` weiter |
-| Ressourcen | Sehr leicht (kein eigener Container) | Ein Container pro App |
-| Mitgeliefertes Beispiel | `sites/main/`, `sites/beispiel/` | `apps/app-example/` |
+| What | HTML/CSS/JS, finished files | A running program (Node, Python, ...) |
+| Where | Folder under `sites/<name>/` | Folder under `apps/<name>/` (with a `Dockerfile`) |
+| How it is served | Caddy serves the files directly | Its own container, Caddy forwards via `reverse_proxy` |
+| Resources | Very light (no own container) | One container per app |
+| Bundled example | `sites/main/`, `sites/beispiel/` | `apps/app-example/` |
 
-### Eine statische Seite hinzufügen (z. B. `blog.deine-domain.de`)
+### Adding a Static Site (e.g. `blog.deine-domain.de`)
 
-1. Ordner mit Inhalt anlegen:
+1. Create a folder with content:
    ```bash
    mkdir -p ~/pi-server/sites/blog
    echo '<h1>Mein Blog</h1>' > ~/pi-server/sites/blog/index.html
    ```
-2. In `config/caddy/Caddyfile` einen Block ergänzen (nach dem Muster von
+2. Add a block in `config/caddy/Caddyfile` (following the pattern of
    `beispiel`):
    ```
    @blog host blog.{$DOMAIN}
@@ -701,20 +696,21 @@ Es gibt zwei Arten von Seiten:
        file_server
    }
    ```
-3. Caddy neu laden: `docker compose restart caddy`
-4. Im Cloudflare-Dashboard einen Public Hostname `blog.deine-domain.de` →
-   `http://caddy:80` anlegen (wie Schnellstart Schritt 8, nur mit Subdomain).
-5. Optional: in Uptime Kuma einen Monitor auf `https://blog.deine-domain.de`.
+3. Reload Caddy: `docker compose restart caddy`
+4. In the Cloudflare dashboard, create a public hostname
+   `blog.deine-domain.de` -> `http://caddy:80` (as in Quick Start step 8,
+   just with a subdomain).
+5. Optional: a monitor on `https://blog.deine-domain.de` in Uptime Kuma.
 
-> Reine Inhalts-Änderungen an bestehenden Seiten (Dateien in `sites/<name>/`
-> ändern) brauchen **keinen** Neustart — Caddy liefert sie sofort aus. Nur
-> Änderungen am `Caddyfile` selbst brauchen `docker compose restart caddy`.
+> Pure content changes to existing sites (editing files in `sites/<name>/`)
+> need **no** restart - Caddy serves them immediately. Only changes to the
+> `Caddyfile` itself need `docker compose restart caddy`.
 
-### Eine dynamische App hinzufügen (z. B. `shop.deine-domain.de`)
+### Adding a Dynamic App (e.g. `shop.deine-domain.de`)
 
-1. App unter `apps/shop/` anlegen (eigenes `Dockerfile`, muss auf einem Port
-   lauschen). `apps/app-example/` dient als Vorlage.
-2. In `docker-compose.yml` einen Dienst ergänzen (nach dem Muster von
+1. Create the app under `apps/shop/` (its own `Dockerfile`, must listen on a
+   port). `apps/app-example/` serves as a template.
+2. Add a service in `docker-compose.yml` (following the pattern of
    `app-example`):
    ```yaml
    shop:
@@ -726,138 +722,135 @@ Es gibt zwei Arten von Seiten:
    ```
    @shop host shop.{$DOMAIN}
    handle @shop {
-       reverse_proxy shop:3000    # Port an die App anpassen
+       reverse_proxy shop:3000    # adjust the port to match the app
    }
    ```
-4. Bauen/starten und Caddy neu laden:
+4. Build/start it and reload Caddy:
    ```bash
    docker compose up -d --build shop
    docker compose restart caddy
    ```
-5. Public Hostname im Cloudflare-Dashboard + Uptime-Kuma-Monitor wie oben.
+5. Public hostname in the Cloudflare dashboard + Uptime Kuma monitor as above.
 
-### Jede Seite als eigenes Git-Repo (empfohlen für unabhängige Versionierung)
+### Each Site as Its Own Git Repo (Recommended for Independent Versioning)
 
-Standardmäßig liegen die Beispielseiten **im** Haupt-Repo. Für eine echte
-Seite mit eigener Git-Historie stattdessen ein separates Repo in den Ordner
-klonen und diesen Pfad in der `.gitignore` des Haupt-Repos eintragen, damit
-beide sich nicht in die Quere kommen:
+By default, the example sites live **inside** the main repo. For a real site
+with its own Git history, clone a separate repo into the folder instead, and
+add that path to the main repo's `.gitignore`, so the two do not interfere
+with each other:
 
 ```bash
-# Beispiel: eigene Blog-Seite aus separatem Repo
-git clone https://github.com/<du>/mein-blog.git ~/pi-server/sites/blog
+# Example: your own blog site from a separate repo
+git clone https://github.com/<you>/my-blog.git ~/pi-server/sites/blog
 echo '/sites/blog/' >> ~/pi-server/.gitignore
 ```
 
-Aktualisieren geht dann bequem per Helfer-Skript (macht `git pull`, und bei
-dynamischen Apps zusätzlich den Rebuild):
+Updating is then conveniently done via a helper script (runs `git pull`, and
+for dynamic apps also the rebuild):
 
 ```bash
-bash scripts/deploy-site.sh blog     # statische Seite
-bash scripts/deploy-site.sh shop     # dynamische App (baut Container neu)
+bash scripts/deploy-site.sh blog     # static site
+bash scripts/deploy-site.sh shop     # dynamic app (rebuilds the container)
 ```
 
-#### Eine mitgelieferte Beispielseite nachträglich umstellen (z. B. `sites/main`)
+#### Converting a Bundled Example Site Later (e.g. `sites/main`)
 
-`sites/main` und `sites/beispiel` liegen von Anfang an **im Haupt-Repo** (siehe
-Tabelle oben). Ersetzt man ihren Inhalt einfach durch die eigene, echte
-Homepage, ohne die beiden Schritte oben (Ordner aus dem Haupt-Repo lösen +
-`.gitignore`-Eintrag) nachzuholen, bleibt der Ordner weiterhin Teil des
-Haupt-Repos. Das Tückische daran: `git pull` funktioniert in diesem Zustand
-scheinbar völlig normal — er meldet nur `Already up to date`, weil er sich
-in Wirklichkeit gegen das **Haupt-Repo** auflöst, nicht gegen das Repo der
-eigentlichen Website. Die Seite aktualisiert sich dann nie, ohne dass eine
-Fehlermeldung darauf hinweist.
+`sites/main` and `sites/beispiel` live **inside the main repo** from the
+start (see the table above). If you simply replace their content with your
+own, real homepage without also doing the two steps above (detaching the
+folder from the main repo + the `.gitignore` entry), the folder remains part
+of the main repo. The tricky part: `git pull` in this state appears to work
+completely normally - it just reports `Already up to date`, because it is
+actually resolving against the **main repo**, not the repo of the real
+website. The site then never updates, without any error pointing to why.
 
-Kurzer Check, ob ein Seitenordner betroffen ist:
+Quick check for whether a site folder is affected:
 
 ```bash
 cd ~/pi-server/sites/main
-git remote -v   # zeigt das Remote des HAUPT-Repos statt der eigentlichen Website? -> betroffen
+git remote -v   # shows the MAIN repo's remote instead of the actual website? -> affected
 ```
 
-Ein mitgeliefertes Skript erledigt die Umstellung automatisch (Haupt-Repo
-entkoppeln + `.gitignore`-Eintrag + Neuklon vom echten Repo; der alte Inhalt
-wird vorsichtshalber nicht gelöscht, sondern als `sites/main.bak-<Zeitstempel>`
-danebengelegt):
+A bundled script automates the conversion (detaching from the main repo +
+`.gitignore` entry + fresh clone from the real repo; the old content is not
+deleted, just to be safe, but moved aside as `sites/main.bak-<timestamp>`):
 
 ```bash
-bash scripts/adopt-site-repo.sh sites/main https://github.com/<du>/meine-homepage.git
-git push   # den Commit, der sites/main jetzt ignoriert, nicht vergessen
+bash scripts/adopt-site-repo.sh sites/main https://github.com/<you>/my-homepage.git
+git push   # do not forget the commit that now makes sites/main ignored
 ```
 
-### Mehrere Seiten zentral verwalten (`sites.conf` + `deploy.sh`)
+### Managing Multiple Sites Centrally (`sites.conf` + `deploy.sh`)
 
-`deploy-site.sh` aktualisiert **eine** bereits vorhandene Seite. Sobald mehrere
-eigene Websites nach dem Muster „ein Repo = ein Container" laufen (siehe oben),
-lohnt sich stattdessen `scripts/deploy.sh`: ein Manifest-getriebenes Skript,
-das **alle** in `sites.conf` eingetragenen Seiten in einem Rutsch klont/pullt,
-baut und startet.
+`deploy-site.sh` updates **one** already-existing site. Once several of your
+own websites are running under the "one repo = one container" pattern (see
+above), `scripts/deploy.sh` is worth using instead: a manifest-driven script
+that clones/pulls, builds, and starts **all** the sites listed in
+`sites.conf` in one go.
 
-`sites.conf` im Repo-Wurzelverzeichnis (eine Zeile pro Seite):
+`sites.conf` at the repo root (one line per site):
 
 ```
 # name    repo_url                                  host    admin
-shop      https://github.com/<du>/meine-shop-app.git shop    yes
-blog      https://github.com/<du>/mein-blog.git      blog    no
+shop      https://github.com/<you>/my-shop-app.git shop    yes
+blog      https://github.com/<you>/my-blog.git      blog    no
 ```
 
-- `name` = Ordnername unter `apps/` **und** Service-Name in `docker-compose.yml`
-  (muss dort ebenfalls als Dienst eingetragen sein, siehe „Eine dynamische App
-  hinzufügen" oben — `sites.conf` allein reicht nicht).
-- `host` = Subdomain-Label, oder `apex` für die Hauptdomain selbst.
-- `admin` = `yes`, wenn die App einen Login braucht. `deploy.sh` fragt dann
-  einmalig nach einem **gemeinsamen** Admin-Benutzernamen/-Passwort (in
-  `admin.env`, gitignored, wird für alle `admin: yes`-Seiten wiederverwendet),
-  schreibt es zusammen mit einem zufälligen `SESSION_SECRET` in `apps/<name>/.env`
-  und führt anschließend `npm run seed:admin` im Container aus. Die jeweilige
-  App muss diese drei Variablen (`ADMIN_USER`, `ADMIN_PASSWORD`,
-  `SESSION_SECRET`) selbst konsumieren (z. B. per `express-session` +
-  eigenem `seed:admin`-Skript).
+- `name` = the folder name under `apps/` **and** the service name in
+  `docker-compose.yml` (it must also be entered there as a service, see
+  "Adding a Dynamic App" above - `sites.conf` alone is not enough).
+- `host` = the subdomain label, or `apex` for the main domain itself.
+- `admin` = `yes` if the app needs a login. `deploy.sh` then asks once for a
+  **shared** admin username/password (stored in `admin.env`, gitignored,
+  reused for all `admin: yes` sites), writes it together with a random
+  `SESSION_SECRET` into `apps/<name>/.env`, and then runs `npm run
+  seed:admin` inside the container. The app itself has to consume these
+  three variables (`ADMIN_USER`, `ADMIN_PASSWORD`, `SESSION_SECRET`) (e.g.
+  via `express-session` plus its own `seed:admin` script).
 
-Nutzung auf dem Pi:
+Usage on the Pi:
 
 ```bash
-bash scripts/deploy.sh                # normales Update aller Seiten
-bash scripts/deploy.sh --fresh        # zusaetzlich alle App-Datenbanken zuruecksetzen
-bash scripts/deploy.sh --set-password # gemeinsames Admin-Passwort neu setzen
+bash scripts/deploy.sh                # normal update of all sites
+bash scripts/deploy.sh --fresh        # also resets all app databases
+bash scripts/deploy.sh --set-password # sets a new shared admin password
 ```
 
-**Wann welches Skript?**
+**Which script, when?**
 
-| Situation | Skript |
+| Situation | Script |
 |---|---|
-| Eine einzelne Seite schnell aktualisieren (kein Admin-Handling, kein Caddy-Neustart) | `deploy-site.sh <name>` |
-| Alle Seiten aus `sites.conf` auf einmal aktualisieren, inkl. gemeinsamem Admin-Account und Caddy-Neustart | `deploy.sh` |
-| Eine Seite ist noch gar nicht geklont | `deploy.sh` (klont automatisch aus `sites.conf`) — oder manuell klonen, dann `deploy-site.sh` |
+| Quickly update a single site (no admin handling, no Caddy restart) | `deploy-site.sh <name>` |
+| Update all sites from `sites.conf` at once, including the shared admin account and a Caddy restart | `deploy.sh` |
+| A site has not been cloned yet at all | `deploy.sh` (clones it automatically from `sites.conf`) - or clone it manually, then `deploy-site.sh` |
 
-### E-Mail: `support@deine-domain.de` einrichten (Cloudflare Email Routing)
+### Setting Up Email: `support@deine-domain.de` (Cloudflare Email Routing)
 
-E-Mail wird **nicht** auf dem Pi gehostet (ein Mailserver auf einem
-Privatanschluss hinter dem Tunnel funktioniert praktisch nicht: Port 25 ist
-meist gesperrt, es bräuchte eingehende Ports entgegen [N1], und ohne feste
-IP + Reputation landen Mails im Spam). Stattdessen leitet **Cloudflare Email
-Routing** kostenlos an dein bestehendes Postfach weiter — reine
-Dashboard-Sache, nichts auf dem Pi:
+Email is **not** hosted on the Pi (a mail server on a residential connection
+behind the tunnel practically does not work: port 25 is usually blocked, it
+would need inbound ports contrary to [N1], and without a static IP and
+reputation, mail ends up in spam). Instead, **Cloudflare Email Routing**
+forwards it for free to your existing mailbox - purely a dashboard matter,
+nothing on the Pi:
 
-1. <https://dash.cloudflare.com> → deine Domain → **Email → Email Routing**.
-2. Beim ersten Mal fügt Cloudflare automatisch die nötigen MX-/TXT-Einträge
-   hinzu (bestätigen).
-3. Unter **Routing rules** eine Adresse anlegen: `support@deine-domain.de`
-   → Ziel = deine echte Adresse (z. B. Gmail). Cloudflare schickt dorthin
-   eine Bestätigungsmail, einmal bestätigen.
-4. Fertig — Mails an `support@deine-domain.de` landen in deinem Postfach.
+1. <https://dash.cloudflare.com> -> your domain -> **Email -> Email Routing**.
+2. The first time, Cloudflare automatically adds the required MX/TXT records
+   (confirm this).
+3. Under **Routing rules**, create an address: `support@deine-domain.de` ->
+   destination = your real address (e.g. Gmail). Cloudflare sends a
+   confirmation email there, confirm it once.
+4. Done - mail to `support@deine-domain.de` now lands in your mailbox.
 
-> Nur **Empfang** (Weiterleitung). Um auch **als** `support@…` zu senden,
-> braucht es zusätzlich einen SMTP-Relay-Dienst — nicht Teil dieses Setups.
+> Only **receiving** (forwarding). To also **send as** `support@...`, you
+> additionally need an SMTP relay service - not part of this setup.
 
 ---
 
-## Claude Code direkt auf dem Pi (On-Demand-Debugging)
+## Claude Code Directly on the Pi (On-Demand Debugging)
 
-Für Debugging und Wartung lässt sich die Claude Code CLI direkt auf dem Pi
-installieren und bei Bedarf im Projektordner aufrufen — ohne dass dafür ein
-Dienst dauerhaft im Hintergrund läuft und Ressourcen verbraucht.
+For debugging and maintenance, the Claude Code CLI can be installed directly
+on the Pi and invoked in the project folder as needed - without any service
+running permanently in the background consuming resources.
 
 ### Installation
 
@@ -865,215 +858,212 @@ Dienst dauerhaft im Hintergrund läuft und Ressourcen verbraucht.
 bash scripts/install-claude-code.sh
 ```
 
-Installiert bei Bedarf Node.js (LTS) und danach die Claude Code CLI per
-`npm`. Bewusst **kein** nativer Installer (`curl -fsSL
-https://claude.ai/install.sh | bash`): dieser hat auf ARM64/Raspberry Pi
-bekannte Probleme (meldet Erfolg, installiert die Binary aber nicht
-zuverlässig mit).
+Installs Node.js (LTS) if needed, and then the Claude Code CLI via `npm`.
+Deliberately **not** the native installer (`curl -fsSL
+https://claude.ai/install.sh | bash`): it has known issues on ARM64/
+Raspberry Pi (reports success but does not reliably install the binary).
 
-Während der Installation kann eine Warnung wie `npm warn allow-scripts ...
-not yet covered by allowScripts` erscheinen (neuere npm-Versionen fragen vor
-Install-Scripts von Paketen nach). In der Praxis hat die CLI danach trotzdem
-funktioniert — mit `claude --version` prüfen (sollte eine Versionsnummer wie
-`2.1.210 (Claude Code)` zeigen). Falls nicht: `npm approve-scripts
---allow-scripts-pending` ausführen und erneut prüfen.
+During installation, a warning like `npm warn allow-scripts ... not yet
+covered by allowScripts` may appear (newer npm versions ask before running
+packages' install scripts). In practice, the CLI has still worked afterward
+- check with `claude --version` (should show a version number like
+`2.1.210 (Claude Code)`). If not: run `npm approve-scripts
+--allow-scripts-pending` and check again.
 
-### Anmelden (einmalig, headless-tauglich)
+### Logging In (One-Time, Headless-Friendly)
 
-Ein Raspberry Pi im Lite-Modus hat keinen Browser. **Wichtig:** Ist
-`ANTHROPIC_API_KEY` oder `CLAUDE_CODE_OAUTH_TOKEN` bereits als
-Umgebungsvariable gesetzt, **bevor** `claude` das erste Mal gestartet wird,
-überspringt die CLI das interaktive Anmelde-Menü automatisch. Das ist auf
-einem headless-Gerät der einfachste Weg — deshalb zuerst dauerhaft setzen,
-dann `claude` starten.
+A Raspberry Pi in Lite mode has no browser. **Important:** if
+`ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN` is already set as an
+environment variable **before** `claude` is started for the first time, the
+CLI automatically skips the interactive login menu. On a headless device
+this is the simplest approach - so set it permanently first, then start
+`claude`.
 
-**Variante A — API-Key (Anthropic Console):**
+**Option A - API key (Anthropic Console):**
 
 ```bash
-echo 'export ANTHROPIC_API_KEY=<dein-api-key>' >> ~/.bashrc
+echo 'export ANTHROPIC_API_KEY=<your-api-key>' >> ~/.bashrc
 source ~/.bashrc
 ```
 
-Der `echo ... >> ~/.bashrc`-Befehl hängt die Zeile dauerhaft an die
-Shell-Konfiguration an, damit die Variable bei jeder neuen Anmeldung
-automatisch gesetzt ist — nicht nur für die aktuelle Sitzung. `source
-~/.bashrc` wendet die Änderung sofort auf die schon offene Sitzung an, ohne
-dass man sich neu einloggen muss.
+The `echo ... >> ~/.bashrc` command appends the line to the shell
+configuration permanently, so the variable is set automatically on every new
+login - not just for the current session. `source ~/.bashrc` applies the
+change to the already-open session immediately, without having to log in
+again.
 
-**Variante B — Claude Pro/Max-Abo:**
+**Option B - Claude Pro/Max subscription:**
 
-Auf einem Gerät **mit** Browser (eigener Computer, nicht der Pi) einmalig:
+On a device **with** a browser (your own computer, not the Pi), once:
 
 ```bash
 claude setup-token
 ```
 
-Führt durch einen Browser-Login und gibt am Ende ein Token aus. Dieses Token
-dann genauso dauerhaft auf dem Pi hinterlegen:
+Walks you through a browser login and prints a token at the end. Then store
+this token on the Pi permanently, the same way:
 
 ```bash
-echo 'export CLAUDE_CODE_OAUTH_TOKEN=<das-ausgegebene-token>' >> ~/.bashrc
+echo 'export CLAUDE_CODE_OAUTH_TOKEN=<the-printed-token>' >> ~/.bashrc
 source ~/.bashrc
 ```
 
-**Falls trotzdem das Menü "Select login method" erscheint** (passiert, wenn
-`claude` gestartet wird, bevor eine der beiden Variablen gesetzt ist) — die
-drei Optionen bedeuten:
+**If the "Select login method" menu appears anyway** (happens when `claude`
+is started before either variable is set) - the three options mean:
 
-| Menüpunkt | Bedeutung | Für den headless Pi |
+| Menu item | Meaning | For the headless Pi |
 |---|---|---|
-| "Account with subscription" | Claude.ai Pro/Max-Login per Browser-OAuth | Auf dem Pi **abbrechen** (kein Browser vorhanden) — stattdessen Variante B von einem Gerät mit Browser aus vorbereiten |
-| "Anthropic Console account" | API-Key-basierte Anmeldung | Entspricht Variante A — einfacher direkt vorab per `ANTHROPIC_API_KEY` setzen, dann erscheint das Menü gar nicht erst |
-| "3rd party platform" | Zugriff über AWS Bedrock / Google Vertex AI o. ä. | Nur relevant, falls Claude bereits über eine dieser Plattformen bezogen wird — für dieses Projekt nicht nötig |
+| "Account with subscription" | Claude.ai Pro/Max login via browser OAuth | **Cancel** on the Pi (no browser available) - prepare option B instead, from a device with a browser |
+| "Anthropic Console account" | API-key-based login | Corresponds to option A - simpler to set `ANTHROPIC_API_KEY` beforehand directly, then the menu never appears in the first place |
+| "3rd party platform" | Access via AWS Bedrock / Google Vertex AI etc. | Only relevant if Claude is already being obtained through one of these platforms - not needed for this project |
 
-Am einfachsten bleibt: Variante A oder B **vorher** einrichten, dann taucht
-das Menü erst gar nicht auf.
+The simplest approach remains: set up option A or B **beforehand**, then the
+menu never comes up at all.
 
-### Verwendung
+### Usage
 
 ```bash
 cd ~/pi-server
 claude
 ```
 
-Startet eine interaktive Sitzung, die automatisch `CLAUDE.md` und
-`raspberry-pi-4-spezifikation.md` aus diesem Repo als Kontext liest — dieselben
-Regeln, nach denen dieses Projekt aufgebaut wurde, gelten dann auch für die
-Debugging-Sitzung. Nach Ende der Sitzung läuft nichts mehr im Hintergrund;
-es gibt bewusst keinen systemd-Dienst und keinen Autostart dafür.
+Starts an interactive session that automatically reads `CLAUDE.md` and
+`raspberry-pi-4-spezifikation.md` from this repo as context - the same rules
+this project was built with then also apply to the debugging session. After
+the session ends, nothing keeps running in the background; there is
+deliberately no systemd service and no autostart for it.
 
-### Nach einer unterbrochenen SSH-Verbindung wieder einsteigen
+### Resuming After an Interrupted SSH Connection
 
-Bricht die SSH-Verbindung während einer laufenden `claude`-Sitzung ab (WLAN
-weg, Laptop zugeklappt, …): **nichts geht verloren.** Claude Code schreibt
-den Sitzungsverlauf fortlaufend auf die Platte, unabhängig von der
-SSH-Verbindung. Nach dem erneuten Einloggen im selben Ordner:
+If the SSH connection drops during an active `claude` session (WLAN gone,
+laptop closed, ...): **nothing is lost.** Claude Code continuously writes
+the session history to disk, independent of the SSH connection. After
+logging back in, in the same folder:
 
 ```bash
 cd ~/pi-server
-claude --continue   # laedt automatisch die zuletzt aktive Sitzung dieses Ordners
+claude --continue   # automatically loads the most recently active session for this folder
 ```
 
-Gibt es mehrere unterbrochene/parallele Sitzungen und die letzte ist nicht
-die richtige:
+If there are several interrupted/parallel sessions and the most recent one
+is not the right one:
 
 ```bash
-claude --resume   # zeigt eine Auswahlliste aller gespeicherten Sitzungen dieses Ordners
+claude --resume   # shows a selection list of all saved sessions for this folder
 ```
 
-Beides funktioniert nur, wenn man sich **im selben Verzeichnis** befindet, in
-dem die Sitzung ursprünglich gestartet wurde (`~/pi-server`) — Sitzungen sind
-pro Arbeitsverzeichnis gespeichert.
+Both only work if you are **in the same directory** where the session was
+originally started (`~/pi-server`) - sessions are stored per working
+directory.
 
-### Hardware-Hinweis
+### Hardware Note
 
-Anthropics offizielles Minimum für die CLI liegt bei 4 GB RAM. Auf einem Pi 4
-mit 1–2 GB RAM konkurriert eine aktive Sitzung mit den laufenden Containern
-um Arbeitsspeicher — für dieses optionale Feature empfiehlt sich ein Pi 4 mit
-mindestens 4 GB RAM.
+Anthropic's official minimum for the CLI is 4 GB RAM. On a Pi 4 with 1-2 GB
+RAM, an active session competes with the running containers for memory - for
+this optional feature, a Pi 4 with at least 4 GB RAM is recommended.
 
 ---
 
-## Referenz: verwendete Image-Versionen
+## Reference: Image Versions Used
 
-Gegen die jeweils aktuelle stabile Version verifiziert und auf echter
-Raspberry-Pi-4-Hardware verifiziert; öffentliche Seite über den
-Cloudflare-Tunnel mit `HTTP/2 200` erreichbar. `:latest` wird laut
-Spezifikation nirgends verwendet.
+Verified against the current stable version of each and verified on real
+Raspberry Pi 4 hardware; the public site is reachable via the Cloudflare
+tunnel with `HTTP/2 200`. Per the specification, `:latest` is not used
+anywhere.
 
-| Dienst | Image | Tag |
+| Service | Image | Tag |
 |---|---|---|
 | Pi-hole | `pihole/pihole` | `2026.07.2` |
-| Reverse Proxy / Web | `caddy` | `2.11.4-alpine` |
+| Reverse proxy / web | `caddy` | `2.11.4-alpine` |
 | Cloudflare Tunnel | `cloudflare/cloudflared` | `2026.7.0` |
 | Uptime Kuma | `louislam/uptime-kuma` | `2.4.0` |
-| Dynamische Beispiel-App | `node` (Build) | `24-alpine` |
+| Dynamic example app | `node` (build) | `24-alpine` |
 
-Neue Version einsetzen: Tag in `docker-compose.yml` ändern,
-`docker compose pull && docker compose up -d`, diese Tabelle aktualisieren.
+To use a new version: change the tag in `docker-compose.yml`,
+`docker compose pull && docker compose up -d`, update this table.
 
 ---
 
-## Referenz: welcher `.env`-Wert kommt woher
+## Reference: Where Each `.env` Value Comes From
 
-Alle Werte werden von `scripts/setup-env.sh` interaktiv abgefragt bzw. (bei
-`AGE_RECIPIENT`) automatisch erzeugt — diese Tabelle ist die Kurzreferenz,
-falls du `.env` von Hand anpassen willst.
+All values are asked for interactively by `scripts/setup-env.sh`, or (in the
+case of `AGE_RECIPIENT`) generated automatically - this table is the quick
+reference in case you want to edit `.env` by hand.
 
-| Variable | Bedeutung | Woher bekommst du den Wert? |
+| Variable | Meaning | Where do you get the value? |
 |---|---|---|
-| `TZ` | Zeitzone aller Container | Z. B. `Europe/Berlin`. Liste: [Wikipedia tz-database](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones) |
-| `LAN_SUBNET` | Heimnetz-CIDR für Firewall-Regeln | Wird automatisch erkannt; manuell prüfen mit `ip -4 addr show` auf dem Pi |
-| `PI_STATIC_IP` | Feste IP des Pi im LAN | Frei wählbar, muss als DHCP-Reservierung im Router eingetragen werden (Anleitung in Schnellstart Schritt 6) |
-| `PORT_PIHOLE_UI` / `PORT_DNS` / `PORT_UPTIME` | Feste Ports für Pi-hole-UI/DNS/Uptime Kuma | Vorgegebene Defaults, i. d. R. unverändert lassen |
-| `DOMAIN` | Öffentliche Domain der Webseite | Eigene Domain, verwaltet als "Zone" in deinem Cloudflare-Account (siehe Voraussetzungen) |
-| `PIHOLE_PASSWORD` | Admin-Passwort Pi-hole | Frei wählbar — `setup-env.sh` kann auch automatisch ein sicheres Passwort generieren |
-| `CLOUDFLARE_TUNNEL_TOKEN` | Tunnel-Token (Secret) | Aus dem Cloudflare Zero-Trust-Dashboard beim Anlegen des Tunnels (Schnellstart Schritt 8) |
-| `BACKUP_REMOTE` | rclone-Remote-Ziel für Backups | Name des rclone-Remotes, das du mit `rclone config` einrichtest (Schnellstart Schritt 13) |
-| `BACKUP_RETENTION_DAILY` / `_WEEKLY` | Anzahl aufbewahrter Backup-Stände | Frei wählbare Zahlen, Default 7 / 4 |
-| `AGE_RECIPIENT` | age-Public-Key zur Backup-Verschlüsselung | Wird von `setup-env.sh` automatisch erzeugt (age-Schlüsselpaar); technisch notwendig, in der SPEC ergänzt |
+| `TZ` | Time zone for all containers | E.g. `Europe/Berlin`. List: [Wikipedia tz database](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones) |
+| `LAN_SUBNET` | Home network CIDR for firewall rules | Detected automatically; check manually with `ip -4 addr show` on the Pi |
+| `PI_STATIC_IP` | Fixed IP of the Pi on the LAN | Freely chosen, must be entered as a DHCP reservation in the router (instructions in Quick Start step 6) |
+| `PORT_PIHOLE_UI` / `PORT_DNS` / `PORT_UPTIME` | Fixed ports for the Pi-hole UI/DNS/Uptime Kuma | Preset defaults, usually leave unchanged |
+| `DOMAIN` | Public domain of the website | Your own domain, managed as a "zone" in your Cloudflare account (see Prerequisites) |
+| `PIHOLE_PASSWORD` | Pi-hole admin password | Freely chosen - `setup-env.sh` can also generate a secure password automatically |
+| `CLOUDFLARE_TUNNEL_TOKEN` | Tunnel token (secret) | From the Cloudflare Zero Trust dashboard when creating the tunnel (Quick Start step 8) |
+| `BACKUP_REMOTE` | rclone remote target for backups | Name of the rclone remote you set up with `rclone config` (Quick Start step 13) |
+| `BACKUP_RETENTION_DAILY` / `_WEEKLY` | Number of retained backup generations | Freely chosen numbers, default 7 / 4 |
+| `AGE_RECIPIENT` | age public key for backup encryption | Generated automatically by `setup-env.sh` (age key pair); technically required, added in the SPEC |
 
 ---
 
-## Repo-Struktur
+## Repository Structure
 
 ```
 pi-server/
-├── docker-compose.yml
-├── .env                        # NICHT committen (gitignored)
-├── .env.example
-├── .gitignore
-├── README.md
-├── CLAUDE.md                    # Arbeitsanweisung fuer Claude Code (Aufbau + Live-Debugging)
-├── raspberry-pi-4-spezifikation.md
-├── sites/                       # STATISCHE Seiten (je Ordner = eine Seite)
-│   ├── main/                    #   Hauptdomain
-│   │   └── index.html
-│   └── beispiel/                #   Beispiel-Unterseite (Vorlage)
-│       └── index.html
-├── apps/                        # DYNAMISCHE Apps (je Ordner = ein Container)
-│   └── app-example/             #   Beispiel-App (Node)
-│       ├── Dockerfile
-│       ├── server.js
-│       └── package.json
-├── config/
-│   └── caddy/
-│       └── Caddyfile            # Reverse-Proxy-Routing aller Seiten
-├── sites.conf                    # Manifest aller Seiten fuer scripts/deploy.sh
-├── scripts/
-│   ├── setup-env.sh             # interaktiver .env-Assistent
-│   ├── 00-bootstrap.sh
-│   ├── 01-harden.sh
-│   ├── deploy-site.sh           # eine Seite aus ihrem Git-Repo aktualisieren
-│   ├── deploy.sh                # alle Seiten aus sites.conf klonen/bauen/starten + Admin-Accounts seeden
-│   ├── adopt-site-repo.sh       # mitgelieferten Seitenordner zu eigenem Git-Repo umbauen
-│   ├── install-backup-cron.sh   # idempotente Cron-Installation
-│   ├── backup.sh
-│   ├── verify.sh                # buendelt alle Verifikations-Checks
-│   └── install-claude-code.sh   # optional: Claude Code CLI fuer Live-Debugging
-└── data/                        # Laufzeit-Volumes (gitignored)
-    ├── pihole/
-    ├── caddy/
-    └── uptime-kuma/
+ |-- docker-compose.yml
+ |-- .env                        # DO NOT commit (gitignored)
+ |-- .env.example
+ |-- .gitignore
+ |-- README.md
+ |-- CLAUDE.md                    # Work instructions for Claude Code (build + live debugging)
+ |-- raspberry-pi-4-spezifikation.md
+ |-- sites/                       # STATIC sites (one folder = one site)
+ |    |-- main/                    #   Main domain
+ |    |    `-- index.html
+ |    `-- beispiel/                #   Example subpage (template)
+ |         `-- index.html
+ |-- apps/                        # DYNAMIC apps (one folder = one container)
+ |    `-- app-example/             #   Example app (Node)
+ |         |-- Dockerfile
+ |         |-- server.js
+ |         `-- package.json
+ |-- config/
+ |    `-- caddy/
+ |         `-- Caddyfile            # Reverse proxy routing for all sites
+ |-- sites.conf                    # Manifest of all sites for scripts/deploy.sh
+ |-- scripts/
+ |    |-- setup-env.sh             # interactive .env assistant
+ |    |-- 00-bootstrap.sh
+ |    |-- 01-harden.sh
+ |    |-- deploy-site.sh           # update one site from its Git repo
+ |    |-- deploy.sh                # clone/build/start all sites from sites.conf + seed admin accounts
+ |    |-- adopt-site-repo.sh       # convert a bundled site folder into its own Git repo
+ |    |-- install-backup-cron.sh   # idempotent cron installation
+ |    |-- backup.sh
+ |    |-- verify.sh                # bundles all verification checks
+ |    `-- install-claude-code.sh   # optional: Claude Code CLI for live debugging
+ `-- data/                        # runtime volumes (gitignored)
+      |-- pihole/
+      |-- caddy/
+      `-- uptime-kuma/
 ```
 
 ---
 
-## Upgrade von einem älteren Stand (nginx `web` → Caddy)
+## Upgrading From an Older Version (nginx `web` -> Caddy)
 
-Frühere Versionen dieses Repos hatten einen einzelnen nginx-Dienst `web` für
-eine einzige Seite. Wer von dort aktualisiert (`git pull`) und die Dienste
-schon laufen hatte, macht danach einmalig:
+Earlier versions of this repo had a single nginx service `web` for a single
+site. Anyone upgrading from there (`git pull`) with services already running
+should do the following once, afterward:
 
-1. Eigenen Inhalt der alten `website/`-Seite (falls angepasst) nach
-   `sites/main/` übernehmen — der Ordner `website/` und die
-   nginx-Konfiguration entfallen.
-2. Im Cloudflare-Dashboard beim bestehenden Public Hostname die **Service
-   URL von `http://web:80` auf `http://caddy:80`** ändern.
-3. Neu starten (baut die Beispiel-App, ersetzt `web` durch `caddy`):
+1. Carry over any custom content of the old `website/` site (if modified) to
+   `sites/main/` - the `website/` folder and the nginx configuration are
+   removed.
+2. In the Cloudflare dashboard, change the existing public hostname's
+   **service URL from `http://web:80` to `http://caddy:80`**.
+3. Restart (builds the example app, replaces `web` with `caddy`):
    ```bash
    docker compose up -d --build --remove-orphans
    docker compose ps
    ```
-   `--remove-orphans` entfernt den alten `web`-Container.
-4. Prüfen: `curl -I https://deine-domain.de` → `HTTP/2 200`.
+   `--remove-orphans` removes the old `web` container.
+4. Check: `curl -I https://deine-domain.de` -> `HTTP/2 200`.

@@ -1,32 +1,32 @@
-# Caddy als Reverse Proxy hinter dem Cloudflare Tunnel.
+# Caddy as reverse proxy behind the Cloudflare Tunnel.
 #
-# WIE ROUTING HIER FUNKTIONIERT:
-# cloudflared schickt JEDEN oeffentlichen Hostnamen an caddy:80 (im Cloudflare-
-# Dashboard sind alle Public Hostnames auf den Service http://caddy:80 gesetzt).
-# Caddy entscheidet dann anhand des Host-Headers, welche Seite ausgeliefert wird.
+# HOW ROUTING WORKS HERE:
+# cloudflared forwards EVERY public hostname to caddy:80 (in the Cloudflare
+# dashboard, all Public Hostnames are set to the service http://caddy:80).
+# Caddy then decides which site to serve based on the Host header.
 #
-# {$DOMAIN} wird beim Einlesen durch den Wert der Umgebungsvariable DOMAIN
-# ersetzt (kommt aus .env ueber docker-compose.yml), z.B. deine-domain.de.
+# {$DOMAIN} is replaced on read-in by the value of the DOMAIN environment
+# variable (comes from .env via docker-compose.yml), e.g. your-domain.de.
 #
-# NEUE SEITE HINZUFUEGEN:
-#  - Statisch: Ordner unter sites/<name>/ anlegen, unten einen @<name>-Block
-#    ergaenzen, dann `docker compose restart caddy`.
-#  - Dynamisch: App unter apps/<name>/ anlegen, als Dienst in docker-compose.yml
-#    eintragen, unten einen reverse_proxy-Block ergaenzen.
-#  - In BEIDEN Faellen zusaetzlich im Cloudflare-Dashboard einen Public Hostname
-#    <name>.<DOMAIN> -> http://caddy:80 anlegen (siehe README).
+# ADDING A NEW SITE:
+#  - Static: create a folder under sites/<name>/, add an @<name> block
+#    below, then `docker compose restart caddy`.
+#  - Dynamic: create an app under apps/<name>/, add it as a service in
+#    docker-compose.yml, add a reverse_proxy block below.
+#  - In BOTH cases, additionally create a Public Hostname
+#    <name>.<DOMAIN> -> http://caddy:80 in the Cloudflare dashboard (see README).
 
 {
-	# Hinter Cloudflare Tunnel: Cloudflare uebernimmt HTTPS nach aussen,
-	# Caddy liefert intern nur HTTP auf Port 80. Automatisches HTTPS also aus.
+	# Behind the Cloudflare Tunnel: Cloudflare handles HTTPS externally,
+	# Caddy only serves HTTP internally on port 80. So automatic HTTPS is off.
 	auto_https off
-	# Admin-API aus (kein Reload noetig - Konfig-Aenderungen per
-	# `docker compose restart caddy`, statische Dateien werden live ausgeliefert).
+	# Admin API off (no reload needed - config changes via
+	# `docker compose restart caddy`, static files are served live).
 	admin off
 }
 
 :80 {
-	# Sicherheits-Header fuer alle Seiten
+	# Security headers for all sites
 	header {
 		X-Content-Type-Options "nosniff"
 		X-Frame-Options "DENY"
@@ -35,42 +35,42 @@
 	}
 	encode gzip zstd
 
-	# --- Hauptseite (Apex-Domain), statisch: sites/main/ ---
+	# --- Main site (apex domain), static: sites/main/ ---
 	@main host {$DOMAIN} www.{$DOMAIN}
 	handle @main {
 		root * /srv/main
 		file_server
 	}
 
-	# --- Beispiel statische Unterseite: beispiel.<DOMAIN> -> sites/beispiel/ ---
-	# (Vorlage: kopieren, umbenennen, eigenen Ordner unter sites/ anlegen.)
+	# --- Example static subpage: beispiel.<DOMAIN> -> sites/beispiel/ ---
+	# (Template: copy, rename, create your own folder under sites/.)
 	@beispiel host beispiel.{$DOMAIN}
 	handle @beispiel {
 		root * /srv/beispiel
 		file_server
 	}
 
-	# --- Beispiel dynamische App: app.<DOMAIN> -> Container app-example ---
+	# --- Example dynamic app: app.<DOMAIN> -> container app-example ---
 	#
-	# WICHTIG fuer Apps mit Login/Sessions: cloudflared spricht Klartext-HTTP
-	# mit caddy:80, also setzt Caddy von sich aus "X-Forwarded-Proto: http".
-	# Frameworks mit Secure-Cookies (z.B. express-session mit
-	# cookie.secure=true hinter "trust proxy") verweigern das Session-Cookie
-	# dann STILLSCHWEIGEND - der Login gelingt scheinbar, das Cookie fehlt,
-	# der Nutzer landet wieder auf /login. Nach aussen ist das Schema immer
-	# https (Cloudflare terminiert TLS), also den Header entsprechend setzen:
+	# IMPORTANT for apps with login/sessions: cloudflared speaks plain HTTP
+	# to caddy:80, so Caddy sets "X-Forwarded-Proto: http" on its own.
+	# Frameworks with secure cookies (e.g. express-session with
+	# cookie.secure=true behind "trust proxy") then SILENTLY refuse the
+	# session cookie - the login appears to succeed, the cookie is missing,
+	# the user lands back on /login. Externally the scheme is always
+	# https (Cloudflare terminates TLS), so set the header accordingly:
 	#
-	#	reverse_proxy <dienst>:3000 {
+	#	reverse_proxy <service>:3000 {
 	#		header_up X-Forwarded-Proto https
 	#	}
 	#
-	# app-example hat keine Sessions und braucht das nicht.
+	# app-example has no sessions and does not need this.
 	@app host app.{$DOMAIN}
 	handle @app {
 		reverse_proxy app-example:3000
 	}
 
-	# Unbekannter Hostname -> 404
+	# Unknown hostname -> 404
 	handle {
 		respond "Not found" 404
 	}

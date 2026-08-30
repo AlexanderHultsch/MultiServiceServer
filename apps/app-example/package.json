@@ -1,7 +1,7 @@
 {
   "name": "app-example",
   "version": "1.0.0",
-  "description": "Dynamische Beispiel-App hinter Caddy (nur Node-Standardbibliothek)",
+  "description": "Dynamic example app behind Caddy (Node standard library only)",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"

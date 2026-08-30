@@ -1,24 +1,24 @@
-# app-example — dynamische Beispiel-App
+# app-example - dynamic example app
 
-Winzige Node-App (nur Standardbibliothek), die zeigt, wie eine **dynamische**
-Website in diesem Setup läuft: eigener Container, eigenes Verzeichnis, von
-Caddy per `reverse_proxy` erreichbar unter `app.<DOMAIN>`.
+Tiny Node app (standard library only) that shows how a **dynamic**
+website runs in this setup: its own container, its own directory, reachable
+from Caddy via `reverse_proxy` at `app.<DOMAIN>`.
 
-## Dateien
-- `server.js` — der HTTP-Server (Platzhalter, gibt Serverzeit aus).
-- `package.json` — Metadaten; hier später echte Abhängigkeiten eintragen.
-- `Dockerfile` — baut das Container-Image (Node 24 Alpine).
+## Files
+- `server.js` - the HTTP server (placeholder, prints the server time).
+- `package.json` - metadata; add real dependencies here later.
+- `Dockerfile` - builds the container image (Node 24 Alpine).
 
-## Durch deine echte App ersetzen
-1. Inhalt dieses Ordners durch deine App ersetzen (muss auf Port `3000`
-   lauschen, oder `PORT` im Container anpassen und im Caddyfile den
-   `reverse_proxy`-Port angleichen).
-2. Falls Abhängigkeiten: im `Dockerfile` die Zeile `RUN npm install --omit=dev`
-   einkommentieren.
-3. Neu bauen und starten: `docker compose up -d --build app-example`.
+## Replace with your real app
+1. Replace the contents of this folder with your app (must listen on port
+   `3000`, or adjust `PORT` in the container and match the
+   `reverse_proxy` port in the Caddyfile).
+2. If you have dependencies: uncomment the line `RUN npm install --omit=dev`
+   in the `Dockerfile`.
+3. Rebuild and start: `docker compose up -d --build app-example`.
 
-## Als eigenes Git-Repo betreiben
-Dieser Ordner ist ein Beispiel im Haupt-Repo. Für eine echte App mit eigener
-Versionierung: eigenes Git-Repo hierher klonen und den Pfad in der
-`.gitignore` des Haupt-Repos eintragen (siehe README, Abschnitt „Weitere
-Websites hosten"). Deploy dann per `git pull` + `docker compose up -d --build`.
+## Running it as its own git repo
+This folder is an example in the main repo. For a real app with its own
+versioning: clone your own git repo here and add the path to the main
+repo's `.gitignore` (see README, "Hosting more websites" section). Then
+deploy via `git pull` + `docker compose up -d --build`.
