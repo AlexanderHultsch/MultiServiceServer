@@ -51,8 +51,8 @@ Convention:
 | `PIHOLE_PASSWORD` | `<<PIHOLE_PASSWORD>>` | **yes** | Pi-hole admin password (secret) |
 | `REPO_ROOT` | `~/pi-server` | yes | Root directory of the repo on the Pi |
 | `BACKUP_REMOTE` | `onedrive:PiBackups` | yes | rclone remote target for data backups |
-| `BACKUP_RETENTION_DAILY` | `7` | yes | Number of daily backup generations to keep |
-| `BACKUP_RETENTION_WEEKLY` | `4` | yes | Number of weekly generations to keep |
+| `BACKUP_RETENTION_COUNT` | `12` | yes | Number of newest weekly backup archives to keep |
+| `BACKUP_HEARTBEAT_URL` | (empty) | yes | Uptime Kuma push monitor URL for backup notifications (optional) |
 | `AGE_RECIPIENT` | `<<AGE_RECIPIENT_PUBLIC_KEY>>` | **yes** | age public key for backup encryption (technically required for section 8.2, added in v2.0) |
 
 **Image tag policy:** All images MUST be pinned to a **concrete published
@@ -424,13 +424,33 @@ Must check, before disabling `PasswordAuthentication`, whether
 - **Data/secrets -> backup remote (encrypted):** `data/` volumes + encrypted `.env`.
 
 ### 8.2 `scripts/backup.sh` (specification)
-1. Pack `data/` into `backup-YYYY-MM-DD.tar.gz`.
-2. Include `.env`.
-3. Encrypt with `age` (public key, `${AGE_RECIPIENT}`) -> `.age`.
-4. Push via `rclone copy` to `${BACKUP_REMOTE}`.
-5. Rotation: keep `${BACKUP_RETENTION_DAILY}` daily and
-   `${BACKUP_RETENTION_WEEKLY}` weekly generations, delete older ones.
-6. Set up as a (nightly) cron job.
+1. Check that `${BACKUP_REMOTE}` is reachable and its token is still valid;
+   abort early with a clear message if not. An expired OneDrive OAuth token
+   is the expected failure mode of an unattended weekly job, and failing
+   before an hour of tar and age work makes the log unambiguous.
+2. Pack the whole of `data/` into `backup-YYYY-MM-DD.tar.gz`. `data/` also
+   holds Pi-hole, Caddy and Uptime Kuma state, it is all small, and a
+   restore needs `.env` anyway - there is no per-site selection.
+3. Include `.env`.
+4. Encrypt with `age` (public key, `${AGE_RECIPIENT}`) -> `.age`.
+5. Push via `rclone copy` to `${BACKUP_REMOTE}`.
+6. Rotation: keep the newest `${BACKUP_RETENTION_COUNT}` archives (default
+   `12`, i.e. about three months of weekly backups); delete everything
+   older than the newest `${BACKUP_RETENTION_COUNT}`. This replaces the
+   former daily/weekly retention pair (see change history). A count is
+   used instead of an age cutoff ("delete anything older than 12 weeks")
+   deliberately: an age cutoff would, if the job stopped running for
+   longer than that, delete every backup that exists while no new one is
+   arriving. Keeping the newest N can never empty the remote.
+7. On success, if `${BACKUP_HEARTBEAT_URL}` is set, ping it with an up
+   status; on failure, ping it with a down status and a short reason.
+   `${BACKUP_HEARTBEAT_URL}` is optional: if it is empty or unset, the
+   backup still runs and only the notification is skipped - it must never
+   be a hard requirement.
+8. Set up as a **weekly** cron job in the root crontab: Mondays at 03:30.
+   The data that matters (accounts, recipes, game progress) changes
+   slowly, and a night-time slot reduces how much the containers are
+   writing while the archive is taken.
 
 **Operational requirements (v2.3, from real-world verification):**
 - Runs as **root** (cron job in the root crontab): the files under `data/`
@@ -439,8 +459,32 @@ Must check, before disabling `PasswordAuthentication`, whether
 - `rclone` is run as the **repo owner** (a normal user) so that its
   `~/.config/rclone` is used and token renewals do not flip the config file
   over to root.
-- tar exit code 1 ("file changed as we read it") is accepted - the
-  containers keep writing to their databases while the backup runs.
+
+**Accepted risk (v2.5): hot tar of a running system.**
+The archive is taken from a running system: the containers keep writing to
+their SQLite databases while tar reads them, and tar exit code 1 ("file
+changed as we read it") is tolerated. This means a backup can in principle
+contain a torn, unrestorable database, and that would only be discovered at
+restore time. Two alternatives were considered - per-database
+`sqlite3 .backup` snapshots, or briefly stopping the containers during the
+backup window - and deliberately not chosen; the owner chose to keep the
+hot tar. This is recorded as an accepted risk so that a future restore
+failure is not a surprise and the decision can be revisited without
+re-deriving it.
+
+**Failure detection (v2.5): Uptime Kuma push heartbeat.**
+`${BACKUP_HEARTBEAT_URL}` points at an Uptime Kuma PUSH monitor and covers
+three failure cases:
+1. The script runs and succeeds -> it pings the monitor with an up status.
+2. The script runs and fails (reachability check, tar, age, or rclone
+   step) -> it pings the monitor with a down status and a short reason.
+3. The script does not run at all - broken cron, Pi switched off, SD card
+   dead - no ping arrives, and the monitor's own heartbeat interval
+   expires, so Uptime Kuma raises the alarm on its own.
+This third case is the reason a push monitor is used rather than the
+script sending mail: a script that never runs cannot send its own mail
+either. Recommended monitor heartbeat interval: 8 days, so that one missed
+weekly run alerts without a late run causing a false alarm.
 
 ### 8.3 Restore procedure
 1. Flash the OS onto the boot medium, run `00-bootstrap.sh` + `01-harden.sh`.
@@ -512,5 +556,14 @@ Per [M7], this must be actually tested once before the setup counts as complete.
   plan); all Public Hostnames -> `http://caddy:80`. Cloudflare Email Routing
   for `support@${DOMAIN}` (5.4b). Uptime Kuma: SQLite recommended, Pi-hole
   monitor via internal service name.
+- **v2.5:** Redesigned the backup schedule and monitoring (8.2): backup.sh
+  now runs weekly (Mondays 03:30) instead of nightly; retention switched
+  from `BACKUP_RETENTION_DAILY`/`BACKUP_RETENTION_WEEKLY` to a single
+  `BACKUP_RETENTION_COUNT` (default 12, keep-newest-N instead of
+  age-based, so a stalled job cannot empty the remote); added an optional
+  `BACKUP_HEARTBEAT_URL` Uptime Kuma push monitor for failure detection,
+  including the no-run-at-all case; added a reachability/token precheck
+  before packing or encrypting; documented the hot-tar approach as a
+  deliberately accepted risk with its rejected alternatives.
 
-*End of SPEC v2.4 - hardware-free, agent-optimized.*
+*End of SPEC v2.5 - hardware-free, agent-optimized.*

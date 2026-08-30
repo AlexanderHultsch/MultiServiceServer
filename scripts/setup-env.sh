@@ -121,8 +121,10 @@ If you do not have this ready right now: press Enter and add it to .env manually
 
 ask BACKUP_REMOTE "rclone remote destination for encrypted backups, format '<remote-name>:<path>'.
 The remote name must be set up with 'rclone config' on this Pi (README backup section)." "onedrive:PiBackups"
-ask BACKUP_RETENTION_DAILY "How many daily backup snapshots should be kept?" "7"
-ask BACKUP_RETENTION_WEEKLY "How many additional weekly backup snapshots should be kept?" "4"
+ask BACKUP_RETENTION_COUNT "How many weekly backup archives should be kept? Older ones are deleted." "12"
+ask BACKUP_HEARTBEAT_URL "Push URL of an Uptime Kuma monitor of type Push (optional).
+The backup pings it on success and on failure. Leave empty to skip this - press Enter -
+you can always add it to .env later." ""
 
 # --- Automatically generate an age keypair if none exists yet ---
 AGE_KEY_FILE="${HOME}/.config/age/pi-server.txt"
@@ -153,8 +155,8 @@ DOMAIN=${DOMAIN}
 PIHOLE_PASSWORD=${PIHOLE_PASSWORD}
 CLOUDFLARE_TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
 BACKUP_REMOTE=${BACKUP_REMOTE}
-BACKUP_RETENTION_DAILY=${BACKUP_RETENTION_DAILY}
-BACKUP_RETENTION_WEEKLY=${BACKUP_RETENTION_WEEKLY}
+BACKUP_RETENTION_COUNT=${BACKUP_RETENTION_COUNT}
+BACKUP_HEARTBEAT_URL=${BACKUP_HEARTBEAT_URL}
 AGE_RECIPIENT=${AGE_RECIPIENT}
 EOF
 chmod 600 "${ENV_FILE}"
