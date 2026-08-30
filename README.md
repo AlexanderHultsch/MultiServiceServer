@@ -37,15 +37,15 @@ containers.
                  | Cloudflare  |  DNS / TLS / DDoS protection / hides home IP
                  +------+------+
                         |  outbound-only tunnel
-========================v==========================================
-# Raspberry Pi - ufw default-deny (inbound)                       #
-#                                                                  #
-#  cloudflared --> caddy --> sites/main         (static)          #
-#                    +  +---> sites/beispiel      (static)        #
-#                    +------> app-example        (dynamic app)    #
-#                                                                  #
-#  pihole (DNS+adblock, LAN only)   uptime-kuma (LAN only)        #
-====================================================================
+ ========================v=========================================
+ : Raspberry Pi - ufw default-deny (inbound)                       :
+ :                                                                  :
+ :  cloudflared --> caddy --> sites/main         (static)          :
+ :                    +  +---> sites/beispiel      (static)        :
+ :                    +------> app-example        (dynamic app)    :
+ :                                                                  :
+ :  pihole (DNS+adblock, LAN only)   uptime-kuma (LAN only)        :
+ ========================================================================
                         |
                    LAN (${LAN_SUBNET})
           all devices use ${PI_STATIC_IP} as DNS
@@ -142,7 +142,7 @@ been preinstalled since Windows 10), or use PuTTYgen.
 
 > **No more default "pi" user:** since Raspberry Pi OS "Bookworm" there is no
 > longer a preinstalled `pi` user. In the Imager, under "Advanced options",
-> you set your **own username**. Throughout this README, `<benutzer>` is a
+> you set your **own username**. Throughout this README, `<username>` is a
 > placeholder for that - in every command, replace it with the actual name
 > you chose.
 
@@ -178,12 +178,12 @@ now from your own computer, using the existing password login:
 
 ```bash
 # Mac/Linux, on your own computer, you will be prompted for the password once:
-ssh-copy-id <benutzer>@pi-server.local
+ssh-copy-id <username>@pi-server.local
 ```
 
 ```powershell
 # Windows (PowerShell), on your own computer, if ssh-copy-id is not available:
-Get-Content $env:USERPROFILE\.ssh\id_ed25519.pub | ssh <benutzer>@pi-server.local "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys"
+Get-Content $env:USERPROFILE\.ssh\id_ed25519.pub | ssh <username>@pi-server.local "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys"
 ```
 
 Then check again on the Pi (command above) - only once "OK: key present"
@@ -195,8 +195,8 @@ appears, continue with step 2 or step 7.
 # Find the Pi on the network (default hostname, or the one you set):
 ping pi-server.local
 
-# Connect (<benutzer> = the username set in the Imager):
-ssh <benutzer>@pi-server.local
+# Connect (<username> = the username set in the Imager):
+ssh <username>@pi-server.local
 ```
 
 If `*.local` does not resolve: find the IP via the router's device list (the
@@ -241,7 +241,7 @@ becomes active after a fresh login):
 
 ```bash
 exit
-ssh <benutzer>@pi-server.local
+ssh <username>@pi-server.local
 cd ~/pi-server
 ```
 
@@ -348,7 +348,7 @@ reserved address (this works regardless of whether WLAN or Ethernet is
 active):
 
 ```bash
-ssh <benutzer>@pi-server.local
+ssh <username>@pi-server.local
 ip -4 addr show | grep inet
 ```
 
@@ -784,7 +784,7 @@ with each other:
 
 ```bash
 # Example: your own blog site from a separate repo
-git clone https://github.com/<du>/mein-blog.git ~/pi-server/sites/blog
+git clone https://github.com/<you>/my-blog.git ~/pi-server/sites/blog
 echo '/sites/blog/' >> ~/pi-server/.gitignore
 ```
 
@@ -819,7 +819,7 @@ A bundled script automates the conversion (detaching from the main repo +
 deleted, just to be safe, but moved aside as `sites/main.bak-<timestamp>`):
 
 ```bash
-bash scripts/adopt-site-repo.sh sites/main https://github.com/<du>/meine-homepage.git
+bash scripts/adopt-site-repo.sh sites/main https://github.com/<you>/my-homepage.git
 git push   # do not forget the commit that now makes sites/main ignored
 ```
 
@@ -835,8 +835,8 @@ that clones/pulls, builds, and starts **all** the sites listed in
 
 ```
 # name    repo_url                                  host    admin
-shop      https://github.com/<du>/meine-shop-app.git shop    yes
-blog      https://github.com/<du>/mein-blog.git      blog    no
+shop      https://github.com/<you>/my-shop-app.git shop    yes
+blog      https://github.com/<you>/my-blog.git      blog    no
 ```
 
 - `name` = the folder name under `apps/` **and** the service name in
@@ -1052,42 +1052,42 @@ reference in case you want to edit `.env` by hand.
 
 ```
 pi-server/
-├── docker-compose.yml
-├── .env                        # DO NOT commit (gitignored)
-├── .env.example
-├── .gitignore
-├── README.md
-├── CLAUDE.md                    # Work instructions for Claude Code (build + live debugging)
-├── raspberry-pi-4-spezifikation.md
-├── sites/                       # STATIC sites (one folder = one site)
-│   ├── main/                    #   Main domain
-│   │   └── index.html
-│   └── beispiel/                #   Example subpage (template)
-│       └── index.html
-├── apps/                        # DYNAMIC apps (one folder = one container)
-│   └── app-example/             #   Example app (Node)
-│       ├── Dockerfile
-│       ├── server.js
-│       └── package.json
-├── config/
-│   └── caddy/
-│       └── Caddyfile            # Reverse proxy routing for all sites
-├── sites.conf                    # Manifest of all sites for scripts/deploy.sh
-├── scripts/
-│   ├── setup-env.sh             # interactive .env assistant
-│   ├── 00-bootstrap.sh
-│   ├── 01-harden.sh
-│   ├── deploy-site.sh           # update one site from its Git repo
-│   ├── deploy.sh                # clone/build/start all sites from sites.conf + seed admin accounts
-│   ├── adopt-site-repo.sh       # convert a bundled site folder into its own Git repo
-│   ├── install-backup-cron.sh   # idempotent cron installation
-│   ├── backup.sh
-│   ├── verify.sh                # bundles all verification checks
-│   └── install-claude-code.sh   # optional: Claude Code CLI for live debugging
-└── data/                        # runtime volumes (gitignored)
-    ├── pihole/
-    ├── caddy/
-    └── uptime-kuma/
+ |-- docker-compose.yml
+ |-- .env                        # DO NOT commit (gitignored)
+ |-- .env.example
+ |-- .gitignore
+ |-- README.md
+ |-- CLAUDE.md                    # Work instructions for Claude Code (build + live debugging)
+ |-- raspberry-pi-4-spezifikation.md
+ |-- sites/                       # STATIC sites (one folder = one site)
+ |    |-- main/                    #   Main domain
+ |    |    `-- index.html
+ |    `-- beispiel/                #   Example subpage (template)
+ |         `-- index.html
+ |-- apps/                        # DYNAMIC apps (one folder = one container)
+ |    `-- app-example/             #   Example app (Node)
+ |         |-- Dockerfile
+ |         |-- server.js
+ |         `-- package.json
+ |-- config/
+ |    `-- caddy/
+ |         `-- Caddyfile            # Reverse proxy routing for all sites
+ |-- sites.conf                    # Manifest of all sites for scripts/deploy.sh
+ |-- scripts/
+ |    |-- setup-env.sh             # interactive .env assistant
+ |    |-- 00-bootstrap.sh
+ |    |-- 01-harden.sh
+ |    |-- deploy-site.sh           # update one site from its Git repo
+ |    |-- deploy.sh                # clone/build/start all sites from sites.conf + seed admin accounts
+ |    |-- adopt-site-repo.sh       # convert a bundled site folder into its own Git repo
+ |    |-- install-backup-cron.sh   # idempotent cron installation
+ |    |-- backup.sh
+ |    |-- verify.sh                # bundles all verification checks
+ |    `-- install-claude-code.sh   # optional: Claude Code CLI for live debugging
+ `-- data/                        # runtime volumes (gitignored)
+      |-- pihole/
+      |-- caddy/
+      `-- uptime-kuma/
 ```
 
 ---
