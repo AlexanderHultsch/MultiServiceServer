@@ -76,7 +76,7 @@ absolutely require a Cloudflare/router web interface.
 | Generating `.env` including LAN detection | Adding the domain to Cloudflare |
 | Generating the age key pair | Creating the Cloudflare Tunnel + public hostname |
 | Backup, encryption, rotation, upload | `rclone config` (OAuth login in the browser) |
-| Cron job for the nightly backup | DHCP reservation + Pi-hole as DNS on the router |
+| Cron job for the weekly backup | DHCP reservation + Pi-hole as DNS on the router |
 | All verification checks (`verify.sh`) | Real restore test on fresh hardware ([M7]) |
 
 ---
@@ -507,7 +507,7 @@ to it goes through `cloudflared`.
   container (permanently higher RAM usage on the already-shared Pi, and
   there are reports of restart loops); its performance advantage only
   matters once you have a lot of monitors. SQLite is a single file in
-  `data/uptime-kuma/`, which the nightly backup covers cleanly. "external
+  `data/uptime-kuma/`, which the weekly backup covers cleanly. "external
   MariaDB/MySQL" is not an option - this setup has no separate database
   server.
 - Then create the admin account.
@@ -563,9 +563,11 @@ so that your rclone login is used):
 sudo bash scripts/backup.sh
 ```
 
-Set it up as a nightly cron job (it lands in root's crontab for the same
-reason; idempotent - running it multiple times does not create duplicate
-entries):
+Set it up as a weekly cron job, Mondays at 03:30 (it lands in root's crontab
+for the same reason; idempotent - running it multiple times does not create
+duplicate entries). If the Pi still has an older, more frequent cron entry
+from before this change, re-running this script replaces it with the new
+weekly schedule rather than leaving both or silently keeping the old one:
 
 ```bash
 bash scripts/install-backup-cron.sh
@@ -575,6 +577,26 @@ bash scripts/install-backup-cron.sh
 (`~/.config/age/pi-server.txt`) is **not** included in the backup itself -
 without it, all backups are worthless. Copy it now to a safe place outside
 the Pi (password manager, USB drive), if you have not done so already.
+
+#### Optional: Backup Failure Notification (Uptime Kuma Push)
+
+The backup works fine without this - it is purely a notification layer.
+
+1. In Uptime Kuma (Quick Start step 12), create a monitor with **Monitor
+   Type = Push** and set the **Heartbeat Interval** to about 8 days (a
+   weekly backup plus some slack for a late run).
+2. Uptime Kuma shows a **Push URL** for that monitor. Put it into `.env` as
+   `BACKUP_HEARTBEAT_URL`.
+3. From then on, three things can happen:
+   - The backup runs and succeeds -> it pings the monitor with an up status.
+   - The backup runs and fails (reachability check, tar, age, or upload) ->
+     it pings the monitor with a down status naming the failing stage.
+   - The backup does not run at all (broken cron, Pi switched off) -> no
+     ping arrives, and the monitor's own 8-day heartbeat interval expires,
+     which is what raises the alarm in this case.
+
+Leaving `BACKUP_HEARTBEAT_URL` empty simply disables the notification; the
+backup itself is unaffected.
 
 ### 15. Verify Everything at Once
 
@@ -609,6 +631,7 @@ is documented in the comments of `scripts/backup.sh`.
 | Devices on the LAN are not using Pi-hole as DNS | Router DNS setting not set yet, or device cache | Check the router DNS setting (Quick Start step 10); reconnect the affected device |
 | `scripts/01-harden.sh` aborts with an error | No public key in `~/.ssh/authorized_keys` | Add the key as in Quick Start step 1, then run it again |
 | `scripts/backup.sh` fails at `rclone` | Remote not configured, or its name does not match `BACKUP_REMOTE`. Important: run `rclone config` as a normal user (not with sudo) - the backup automatically uses that user's configuration | `rclone listremotes` (without sudo); repeat Quick Start step 13 |
+| `scripts/backup.sh` aborts immediately with "remote not reachable" (before any tar/age output) | The upfront reachability check failed - usually an expired OneDrive OAuth token | `rclone config reconnect <remote>:` (as the normal user, not with sudo), then run the backup again |
 | `-bash: git: command not found` while cloning | Raspberry Pi OS Lite does not have `git` preinstalled, and `00-bootstrap.sh` (which installs it) only runs after cloning | `sudo apt update && sudo apt install -y git`, then clone again (Quick Start step 3) |
 | `git pull` in `sites/<name>` reports `Already up to date`, but the site still shows old content | `sites/<name>` is not its own Git repo but still lives inside the main repo (common with `sites/main` when the bundled example site was replaced directly with the real homepage) - `git pull` then resolves against the main repo, not the actual website | Check `git remote -v` in `sites/<name>`: does it show the main repo instead of the website? -> `bash scripts/adopt-site-repo.sh sites/<name> <real-repo-url>` (see "Each Site as Its Own Git Repo") |
 | No longer reachable at the reserved IP after a reboot | The router reservation is tied to the MAC address of the **wrong** interface (e.g. `eth0` reserved, but the Pi is connected via `wlan0`, or vice versa) | `ip -4 addr show` on the Pi, determine the active interface, match its MAC in the router (Quick Start step 6) |
@@ -768,7 +791,7 @@ deploy:
 - **Uptime Kuma:** create a monitor on
   `https://bring2bring.deine-domain.de/healthz` (as described above under
   "Hosting Additional Websites").
-- **Backup:** `data/bring2bring/` is already covered by the nightly backup -
+- **Backup:** `data/bring2bring/` is already covered by the weekly backup -
   `scripts/backup.sh` packs the entire `data/` directory as a whole
   (`tar ... data .env`), without enumerating individual subfolders.
 - **Deploying:** `bash scripts/deploy.sh` clones/pulls Bring2Bring!, writes
@@ -1043,7 +1066,8 @@ reference in case you want to edit `.env` by hand.
 | `PIHOLE_PASSWORD` | Pi-hole admin password | Freely chosen - `setup-env.sh` can also generate a secure password automatically |
 | `CLOUDFLARE_TUNNEL_TOKEN` | Tunnel token (secret) | From the Cloudflare Zero Trust dashboard when creating the tunnel (Quick Start step 8) |
 | `BACKUP_REMOTE` | rclone remote target for backups | Name of the rclone remote you set up with `rclone config` (Quick Start step 13) |
-| `BACKUP_RETENTION_DAILY` / `_WEEKLY` | Number of retained backup generations | Freely chosen numbers, default 7 / 4 |
+| `BACKUP_RETENTION_COUNT` | Number of retained weekly backup archives | Freely chosen, default `12` (about three months) |
+| `BACKUP_HEARTBEAT_URL` | Push URL of an Uptime Kuma monitor for backup failure notification | Optional; from the Push monitor in Uptime Kuma (see "Optional: Backup Failure Notification" in Quick Start step 14) |
 | `AGE_RECIPIENT` | age public key for backup encryption | Generated automatically by `setup-env.sh` (age key pair); technically required, added in the SPEC |
 
 ---
