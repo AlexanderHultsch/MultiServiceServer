@@ -632,6 +632,7 @@ is documented in the comments of `scripts/backup.sh`.
 | `scripts/01-harden.sh` aborts with an error | No public key in `~/.ssh/authorized_keys` | Add the key as in Quick Start step 1, then run it again |
 | `scripts/backup.sh` fails at `rclone` | Remote not configured, or its name does not match `BACKUP_REMOTE`. Important: run `rclone config` as a normal user (not with sudo) - the backup automatically uses that user's configuration | `rclone listremotes` (without sudo); repeat Quick Start step 13 |
 | `scripts/backup.sh` aborts immediately with "remote not reachable" (before any tar/age output) | The upfront reachability check failed - usually an expired OneDrive OAuth token | `rclone config reconnect <remote>:` (as the normal user, not with sudo), then run the backup again |
+| `scripts/backup.sh` reaches the upload stage and fails with `unauthenticated: Unauthenticated`, even though `rclone lsd <remote>:` still works | rclone itself is too old for current OneDrive (the apt-packaged 1.60 does this) | Install the pinned version as `00-bootstrap.sh` does, check with `rclone version`; the config and token stay valid, so no re-authorisation is needed |
 | `-bash: git: command not found` while cloning | Raspberry Pi OS Lite does not have `git` preinstalled, and `00-bootstrap.sh` (which installs it) only runs after cloning | `sudo apt update && sudo apt install -y git`, then clone again (Quick Start step 3) |
 | `git pull` in `sites/<name>` reports `Already up to date`, but the site still shows old content | `sites/<name>` is not its own Git repo but still lives inside the main repo (common with `sites/main` when the bundled example site was replaced directly with the real homepage) - `git pull` then resolves against the main repo, not the actual website | Check `git remote -v` in `sites/<name>`: does it show the main repo instead of the website? -> `bash scripts/adopt-site-repo.sh sites/<name> <real-repo-url>` (see "Each Site as Its Own Git Repo") |
 | No longer reachable at the reserved IP after a reboot | The router reservation is tied to the MAC address of the **wrong** interface (e.g. `eth0` reserved, but the Pi is connected via `wlan0`, or vice versa) | `ip -4 addr show` on the Pi, determine the active interface, match its MAC in the router (Quick Start step 6) |
@@ -1044,9 +1045,11 @@ anywhere.
 | Cloudflare Tunnel | `cloudflare/cloudflared` | `2026.7.0` |
 | Uptime Kuma | `louislam/uptime-kuma` | `2.4.0` |
 | Dynamic example app | `node` (build) | `24-alpine` |
+| Backup upload | `rclone` (official download, not apt) | `1.75.0` |
 
-To use a new version: change the tag in `docker-compose.yml`,
-`docker compose pull && docker compose up -d`, update this table.
+For Docker images: change the tag in `docker-compose.yml`, then run
+`docker compose pull && docker compose up -d`. For rclone: change `RCLONE_VERSION`
+in `scripts/00-bootstrap.sh` and re-run that script. Update this table in both cases.
 
 ---
 
