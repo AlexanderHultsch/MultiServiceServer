@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Fuehrt alle Verifikations-Checks aus README/CLAUDE.md gebuendelt aus.
-# Bricht bei Fehlern NICHT ab, sondern zeigt am Ende eine PASS/FAIL-Uebersicht.
+# Runs all verification checks from README/CLAUDE.md in one bundle.
+# Does NOT abort on errors, but shows a PASS/FAIL summary at the end.
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -47,8 +47,8 @@ check_domain_reachable() {
   curl -fsI --max-time 10 "https://${DOMAIN}" >/dev/null
 }
 check_static_ip_bound() {
-  # Erkennt Drift zwischen .env und der tatsaechlich aktiven Netzwerk-IP
-  # (z.B. falsches Interface im Router reserviert, oder WLAN/LAN vertauscht).
+  # Detects drift between .env and the actually active network IP
+  # (e.g. wrong interface reserved in the router, or WiFi/LAN swapped).
   [[ -f .env ]] || return 1
   # shellcheck disable=SC1091
   set -a; source .env; set +a
@@ -56,24 +56,24 @@ check_static_ip_bound() {
   ip -4 addr show | grep -q "inet ${PI_STATIC_IP}/"
 }
 check_wifi_not_unexpectedly_blocked() {
-  # Warnt, falls WLAN per rfkill blockiert ist, OBWOHL kein Ethernet-Kabel
-  # aktiv ist - das wuerde den Pi komplett vom Netz trennen (siehe README
-  # Troubleshooting "Nach Neustart keine Verbindung mehr, WLAN tot").
+  # Warns if WiFi is blocked via rfkill WHILE no Ethernet cable is
+  # active - that would cut the Pi off the network entirely (see README
+  # Troubleshooting "No connection after reboot, WiFi dead").
   command -v rfkill >/dev/null 2>&1 || return 0
   rfkill list wifi 2>/dev/null | grep -qi "Soft blocked: yes" || return 0
   ip -4 addr show eth0 2>/dev/null | grep -q "inet " && return 0
   return 1
 }
 
-check "docker compose config ist gueltig" check_compose_config
-check "Alle Compose-Dienste laufen" check_compose_running
-check "Keine Secrets/data/ im Git" check_no_secrets_in_git
-check "ufw: aktiv + Default-Deny eingehend" check_ufw_default_deny
-check "Oeffentliche Webseite unter https://\${DOMAIN} erreichbar" check_domain_reachable
-check "PI_STATIC_IP ist tatsaechlich an einem Interface aktiv" check_static_ip_bound
-check "WLAN nicht blockiert, waehrend kein Ethernet aktiv ist" check_wifi_not_unexpectedly_blocked
+check "docker compose config is valid" check_compose_config
+check "All compose services are running" check_compose_running
+check "No secrets/data/ in git" check_no_secrets_in_git
+check "ufw: active + default-deny inbound" check_ufw_default_deny
+check "Public website reachable at https://\${DOMAIN}" check_domain_reachable
+check "PI_STATIC_IP is actually active on an interface" check_static_ip_bound
+check "WiFi not blocked while no Ethernet is active" check_wifi_not_unexpectedly_blocked
 
 echo "=================================================================="
-echo "Ergebnis: ${PASS} bestanden, ${FAIL} fehlgeschlagen"
+echo "Result: ${PASS} passed, ${FAIL} failed"
 echo "=================================================================="
 [[ "${FAIL}" -eq 0 ]]

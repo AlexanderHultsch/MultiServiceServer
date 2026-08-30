@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Interaktiver Assistent fuer .env (SPEC Abschnitt 1 + 10).
-# Fragt jeden Wert einzeln ab, erklaert woher er kommt, schlaegt sinnvolle
-# Defaults vor (LAN-Erkennung, age-Key-Erzeugung) und schreibt am Ende .env.
+# Interactive assistant for .env (SPEC Section 1 + 10).
+# Asks for each value individually, explains where it comes from, suggests
+# sensible defaults (LAN detection, age key generation) and writes .env at the end.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -9,24 +9,24 @@ REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 ENV_FILE="${REPO_ROOT}/.env"
 
 if [[ "$(id -u)" -eq 0 ]]; then
-  echo "FEHLER: bitte OHNE sudo ausfuehren:  bash scripts/setup-env.sh" >&2
-  echo "Sonst gehoeren .env und der age-Schluessel root statt deinem Nutzer," >&2
-  echo "und der age-Schluessel landet unter /root statt in deinem Home." >&2
+  echo "ERROR: please run WITHOUT sudo:  bash scripts/setup-env.sh" >&2
+  echo "Otherwise .env and the age key would belong to root instead of your user," >&2
+  echo "and the age key would end up under /root instead of in your home directory." >&2
   exit 1
 fi
 
 if [[ -f "${ENV_FILE}" ]]; then
-  read -r -p ".env existiert bereits. Ueberschreiben? [y/N] " confirm
-  [[ "${confirm}" =~ ^[Yy]$ ]] || { echo "Abgebrochen, bestehende .env bleibt unveraendert."; exit 0; }
+  read -r -p ".env already exists. Overwrite? [y/N] " confirm
+  [[ "${confirm}" =~ ^[Yy]$ ]] || { echo "Aborted, existing .env left unchanged."; exit 0; }
 fi
 
 echo "=================================================================="
-echo " pi-server Setup-Assistent"
-echo " Enter uebernimmt jeweils den in [Klammern] vorgeschlagenen Wert."
+echo " pi-server setup assistant"
+echo " Press Enter to accept the value suggested in [brackets]."
 echo "=================================================================="
 
 ask() {
-  # ask <Variablenname> <Erklaerungstext> <Default>
+  # ask <variable-name> <explanation-text> <default>
   local __varname="$1" __hint="$2" __default="$3" __input
   echo
   echo "--- ${__varname} ---"
@@ -36,7 +36,7 @@ ask() {
 }
 
 ask_secret() {
-  # ask_secret <Variablenname> <Erklaerungstext>
+  # ask_secret <variable-name> <explanation-text>
   local __varname="$1" __hint="$2" __input
   echo
   echo "--- ${__varname} ---"
@@ -46,7 +46,7 @@ ask_secret() {
   printf -v "$__varname" '%s' "${__input}"
 }
 
-# --- Netzwerk-Erkennung als Vorschlag ---
+# --- Network detection as a suggestion ---
 DETECTED_IP=""
 DETECTED_SUBNET=""
 if command -v ip >/dev/null 2>&1; then
@@ -57,90 +57,90 @@ if command -v ip >/dev/null 2>&1; then
 fi
 DETECTED_SUBNET="${DETECTED_SUBNET:-192.168.1.0/24}"
 DETECTED_IP="${DETECTED_IP:-192.168.1.10}"
-# Auf ein /24 normalisieren, falls eine Host-Adresse mit /32 o.ae. erkannt wurde
+# Normalize to a /24 if a host address with /32 or similar was detected
 DETECTED_SUBNET="$(echo "${DETECTED_SUBNET}" | sed -E 's#^([0-9]+\.[0-9]+\.[0-9]+)\.[0-9]+/.*#\1.0/24#')"
 
-ask TZ "Zeitzone, z.B. 'Europe/Berlin'. Liste: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones" "Europe/Berlin"
+ask TZ "Time zone, e.g. 'Europe/Berlin'. List: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones" "Europe/Berlin"
 
-ask LAN_SUBNET "Dein Heimnetz-CIDR (die NETZ-Adresse, nicht die IP des Pi selbst - z.B. 192.168.178.0/24).
-Falls falsch: auf dem Pi 'ip -4 addr show' ausfuehren und das Netz hinter deiner IP ablesen (z.B. 192.168.1.0/24)." "${DETECTED_SUBNET}"
-# Falls versehentlich eine Host-Adresse statt der Netz-Adresse eingegeben wurde
-# (z.B. 192.168.178.53/24 statt 192.168.178.0/24), automatisch korrigieren.
-# Nur bei /24 bzw. fehlender Prefix-Laenge - andere Netze (/16, /8, ...)
-# bleiben bewusst unangetastet.
+ask LAN_SUBNET "Your home network CIDR (the NETWORK address, not the Pi's own IP - e.g. 192.168.178.0/24).
+If wrong: run 'ip -4 addr show' on the Pi and read off the network behind your IP (e.g. 192.168.1.0/24)." "${DETECTED_SUBNET}"
+# If a host address was entered by mistake instead of the network address
+# (e.g. 192.168.178.53/24 instead of 192.168.178.0/24), fix it automatically.
+# Only for /24 or a missing prefix length - other networks (/16, /8, ...)
+# are deliberately left untouched.
 if [[ "${LAN_SUBNET}" =~ ^([0-9]+\.[0-9]+\.[0-9]+)\.[0-9]+(/24)?$ ]]; then
   LAN_SUBNET="${BASH_REMATCH[1]}.0/24"
 fi
 
-ask PI_STATIC_IP "Die feste IP, die der Pi im LAN bekommen soll (DHCP-Reservierung im Router -
-siehe README Abschnitt 'Feste IP fuer den Pi reservieren'). Vorschlag = aktuell erkannte IP dieses Geraets." "${DETECTED_IP}"
+ask PI_STATIC_IP "The static IP the Pi should get on the LAN (DHCP reservation in the router -
+see the README section on reserving a static IP for the Pi). Suggestion = the IP currently detected for this device." "${DETECTED_IP}"
 
-# Plausibilitaet: bei einem /24-Netz muessen die ersten drei Oktette uebereinstimmen.
+# Sanity check: for a /24 network the first three octets must match.
 if [[ "${LAN_SUBNET}" == */24 ]]; then
   NET_PREFIX="${LAN_SUBNET%.*}"
   if [[ "${PI_STATIC_IP}" != "${NET_PREFIX}."* ]]; then
-    echo "WARNUNG: PI_STATIC_IP (${PI_STATIC_IP}) liegt nicht im LAN_SUBNET (${LAN_SUBNET})."
-    echo "Firewall-Regeln und Port-Bindungen passen dann nicht zusammen - bitte pruefen."
+    echo "WARNING: PI_STATIC_IP (${PI_STATIC_IP}) is not within LAN_SUBNET (${LAN_SUBNET})."
+    echo "Firewall rules and port bindings will then not match up - please check."
   fi
 fi
 
-ask PORT_PIHOLE_UI "Host-Port fuer die Pi-hole Weboberflaeche (nur im LAN erreichbar). In der Regel unveraendert lassen." "8080"
-ask PORT_DNS "Port fuer DNS. Muss 53 sein, ausser du weisst genau warum du das aenderst." "53"
-ask PORT_UPTIME "Host-Port fuer Uptime Kuma (nur im LAN erreichbar)." "3001"
+ask PORT_PIHOLE_UI "Host port for the Pi-hole web interface (reachable only on the LAN). Usually leave unchanged." "8080"
+ask PORT_DNS "Port for DNS. Must be 53 unless you know exactly why you are changing it." "53"
+ask PORT_UPTIME "Host port for Uptime Kuma (reachable only on the LAN)." "3001"
 
-ask DOMAIN "Deine oeffentliche Domain (z.B. example.com oder status.example.com).
-Muss als 'Zone' in deinem Cloudflare-Account verwaltet werden (Nameserver auf Cloudflare zeigend).
-Falls du noch keine Domain hast: https://dash.cloudflare.com -> Registrar, oder eine bestehende Domain
-zu Cloudflare umziehen (Website hinzufuegen -> Nameserver beim aktuellen Registrar umstellen)." ""
+ask DOMAIN "Your public domain (e.g. example.com or status.example.com).
+Must be managed as a 'Zone' in your Cloudflare account (nameservers pointing to Cloudflare).
+If you do not have a domain yet: https://dash.cloudflare.com -> Registrar, or move an existing domain
+to Cloudflare (Add a site -> switch nameservers at your current registrar)." ""
 while [[ -z "${DOMAIN}" ]]; do
-  echo "DOMAIN darf nicht leer sein."
-  ask DOMAIN "Deine oeffentliche Domain, siehe Hinweis oben." ""
+  echo "DOMAIN must not be empty."
+  ask DOMAIN "Your public domain, see the note above." ""
 done
-# Haeufiger Copy-Paste-Fehler: URL statt Domain eingefuegt -> bereinigen.
+# Common copy-paste mistake: a URL pasted instead of a domain -> clean it up.
 DOMAIN="${DOMAIN#https://}"
 DOMAIN="${DOMAIN#http://}"
 DOMAIN="${DOMAIN%%/*}"
 
-ask_secret PIHOLE_PASSWORD "Admin-Passwort fuer die Pi-hole Weboberflaeche. Frei waehlbar, wird jetzt nur lokal
-in .env gespeichert (nicht auf einem Server abgefragt). Leer lassen = zufaelliges, sicheres Passwort wird erzeugt."
+ask_secret PIHOLE_PASSWORD "Admin password for the Pi-hole web interface. Choose freely; it is only stored locally
+in .env right now (not sent to any server). Leave empty = a random, secure password will be generated."
 if [[ -z "${PIHOLE_PASSWORD}" ]]; then
   PIHOLE_PASSWORD="$(head -c 32 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 24)"
-  echo "Generiertes Pi-hole-Passwort: ${PIHOLE_PASSWORD}"
-  echo "(Notiere es dir jetzt - es wird nur einmal angezeigt und steht danach in .env.)"
+  echo "Generated Pi-hole password: ${PIHOLE_PASSWORD}"
+  echo "(Write it down now - it is shown only once and afterwards lives in .env.)"
 elif [[ "${#PIHOLE_PASSWORD}" -lt 8 ]]; then
-  echo "WARNUNG: Das ist ein sehr kurzes Passwort (${#PIHOLE_PASSWORD} Zeichen)."
-  echo "Die Pi-hole-UI ist zwar nur im LAN erreichbar, trotzdem empfehlenswert:"
-  echo "spaeter in der Pi-hole-UI unter Settings > Web Interface / API ein laengeres setzen."
+  echo "WARNING: this is a very short password (${#PIHOLE_PASSWORD} characters)."
+  echo "The Pi-hole UI is reachable only on the LAN, but it is still recommended to"
+  echo "set a longer one later in the Pi-hole UI under Settings > Web Interface / API."
 fi
 
-ask_secret CLOUDFLARE_TUNNEL_TOKEN "Tunnel-Token aus dem Cloudflare Zero Trust Dashboard:
+ask_secret CLOUDFLARE_TUNNEL_TOKEN "Tunnel token from the Cloudflare Zero Trust dashboard:
 https://one.dash.cloudflare.com -> Networks -> Tunnels -> Create a tunnel -> Cloudflared ->
-Name vergeben -> bei 'Choose your environment' auf 'Docker' klicken.
-Dort wird ein 'docker run ...--token eyJ...' Befehl angezeigt - kopiere NUR den Wert nach --token.
-Falls du das jetzt noch nicht griffbereit hast: Enter druecken und spaeter manuell in .env eintragen."
+give it a name -> click 'Docker' under 'Choose your environment'.
+A 'docker run ...--token eyJ...' command is shown there - copy ONLY the value after --token.
+If you do not have this ready right now: press Enter and add it to .env manually later."
 
-ask BACKUP_REMOTE "rclone-Remote-Ziel fuer verschluesselte Backups, Format '<remote-name>:<Pfad>'.
-Der Remote-Name muss mit 'rclone config' auf diesem Pi eingerichtet sein (README Abschnitt Backup)." "onedrive:PiBackups"
-ask BACKUP_RETENTION_DAILY "Wie viele taegliche Backup-Staende sollen behalten werden?" "7"
-ask BACKUP_RETENTION_WEEKLY "Wie viele woechentliche Backup-Staende sollen zusaetzlich behalten werden?" "4"
+ask BACKUP_REMOTE "rclone remote destination for encrypted backups, format '<remote-name>:<path>'.
+The remote name must be set up with 'rclone config' on this Pi (README backup section)." "onedrive:PiBackups"
+ask BACKUP_RETENTION_DAILY "How many daily backup snapshots should be kept?" "7"
+ask BACKUP_RETENTION_WEEKLY "How many additional weekly backup snapshots should be kept?" "4"
 
-# --- age-Schluesselpaar automatisch erzeugen, falls noch keins vorhanden ---
+# --- Automatically generate an age keypair if none exists yet ---
 AGE_KEY_FILE="${HOME}/.config/age/pi-server.txt"
 echo
-echo "--- AGE_RECIPIENT (Backup-Verschluesselung) ---"
+echo "--- AGE_RECIPIENT (backup encryption) ---"
 if [[ -f "${AGE_KEY_FILE}" ]]; then
-  echo "Vorhandenes age-Schluesselpaar gefunden: ${AGE_KEY_FILE}"
+  echo "Existing age keypair found: ${AGE_KEY_FILE}"
 else
-  echo "Kein age-Schluesselpaar gefunden - erzeuge eins unter ${AGE_KEY_FILE}"
+  echo "No age keypair found - generating one at ${AGE_KEY_FILE}"
   mkdir -p "$(dirname "${AGE_KEY_FILE}")"
   age-keygen -o "${AGE_KEY_FILE}" 2>/tmp/age-keygen.$$.log
   cat /tmp/age-keygen.$$.log
   rm -f /tmp/age-keygen.$$.log
 fi
 AGE_RECIPIENT="$(grep 'public key' "${AGE_KEY_FILE}" -i | awk '{print $NF}')"
-echo "Verwende Public Key: ${AGE_RECIPIENT}"
-echo "WICHTIG: ${AGE_KEY_FILE} enthaelt den PRIVATEN Schluessel und wird NICHT automatisch"
-echo "gesichert. Kopiere ihn jetzt an einen sicheren Ort ausserhalb des Pi (Passwort-Manager, USB)."
+echo "Using public key: ${AGE_RECIPIENT}"
+echo "IMPORTANT: ${AGE_KEY_FILE} contains the PRIVATE key and is NOT backed up"
+echo "automatically. Copy it now to a safe place outside the Pi (password manager, USB drive)."
 
 cat > "${ENV_FILE}" <<EOF
 TZ=${TZ}
@@ -161,10 +161,10 @@ chmod 600 "${ENV_FILE}"
 
 echo
 echo "=================================================================="
-echo ".env geschrieben nach ${ENV_FILE} (chmod 600)."
+echo ".env written to ${ENV_FILE} (chmod 600)."
 if [[ -z "${CLOUDFLARE_TUNNEL_TOKEN}" ]]; then
-  echo "HINWEIS: CLOUDFLARE_TUNNEL_TOKEN ist noch leer - vor 'docker compose up -d'"
-  echo "in .env nachtragen, sonst startet der cloudflared-Container nicht erfolgreich."
+  echo "NOTE: CLOUDFLARE_TUNNEL_TOKEN is still empty - add it to .env before running"
+  echo "'docker compose up -d', otherwise the cloudflared container will fail to start."
 fi
-echo "Naechster Schritt: bash scripts/01-harden.sh"
+echo "Next step: bash scripts/01-harden.sh"
 echo "=================================================================="
