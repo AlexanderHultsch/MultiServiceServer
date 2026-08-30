@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# Aktualisiert eine einzelne Website auf den neuesten Stand ihres Git-Repos.
-# Nutzung:  bash scripts/deploy-site.sh <name>
+# Updates a single website to the latest state of its git repo.
+# Usage:  bash scripts/deploy-site.sh <name>
 #
-# Findet den Ordner automatisch:
-#   sites/<name>/  -> statische Seite: git pull genuegt (Caddy liefert live aus)
-#   apps/<name>/   -> dynamische App: git pull + Container neu bauen/starten
+# Finds the folder automatically:
+#   sites/<name>/  -> static site: git pull is enough (Caddy serves it live)
+#   apps/<name>/   -> dynamic app: git pull + rebuild/restart the container
 #
-# Voraussetzung: Der jeweilige Ordner ist ein eigenes Git-Repo (siehe README
-# "Weitere Websites hosten"). Ist es KEIN Git-Repo (z.B. die mitgelieferten
-# Beispiele, die im Haupt-Repo liegen), wird der git-pull-Schritt uebersprungen.
+# Prerequisite: the folder in question is its own git repo (see README
+# "Hosting more websites"). If it is NOT a git repo (e.g. the bundled
+# examples that live in the main repo), the git-pull step is skipped.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -16,8 +16,8 @@ REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 
 NAME="${1:-}"
 if [[ -z "${NAME}" ]]; then
-  echo "Nutzung: bash scripts/deploy-site.sh <name>" >&2
-  echo "Vorhandene Seiten:" >&2
+  echo "Usage: bash scripts/deploy-site.sh <name>" >&2
+  echo "Existing sites:" >&2
   ls -1 "${REPO_ROOT}/sites" 2>/dev/null | sed 's/^/  sites\//' >&2 || true
   ls -1 "${REPO_ROOT}/apps" 2>/dev/null | sed 's/^/  apps\//' >&2 || true
   exit 1
@@ -29,22 +29,22 @@ pull_if_git_repo() {
     echo "==> git pull in ${dir}"
     git -C "${dir}" pull --ff-only
   else
-    echo "==> ${dir} ist kein eigenes Git-Repo - ueberspringe git pull"
-    echo "    (Aenderungen liegen direkt im Haupt-Repo, dort committen/pullen.)"
+    echo "==> ${dir} is not its own git repo - skipping git pull"
+    echo "    (changes live directly in the main repo, commit/pull there instead.)"
   fi
 }
 
 if [[ -d "${REPO_ROOT}/apps/${NAME}" ]]; then
   pull_if_git_repo "${REPO_ROOT}/apps/${NAME}"
-  echo "==> Dynamische App neu bauen und starten: ${NAME}"
+  echo "==> Rebuilding and starting the dynamic app: ${NAME}"
   docker compose -f "${REPO_ROOT}/docker-compose.yml" up -d --build "${NAME}"
 elif [[ -d "${REPO_ROOT}/sites/${NAME}" ]]; then
   pull_if_git_repo "${REPO_ROOT}/sites/${NAME}"
-  echo "==> Statische Seite '${NAME}' aktualisiert - Caddy liefert die Dateien"
-  echo "    live aus, kein Neustart noetig."
+  echo "==> Static site '${NAME}' updated - Caddy serves the files"
+  echo "    live, no restart needed."
 else
-  echo "FEHLER: weder sites/${NAME} noch apps/${NAME} gefunden." >&2
+  echo "ERROR: found neither sites/${NAME} nor apps/${NAME}." >&2
   exit 1
 fi
 
-echo "==> Fertig."
+echo "==> Done."

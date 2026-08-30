@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
-# Ersetzt eine im Haupt-Repo mitgelieferte Seite/App (z. B. das
-# Beispiel-sites/main) durch einen eigenen, separaten Git-Klon - und traegt
-# den Pfad automatisch in die .gitignore des Haupt-Repos ein, damit sich
-# beide Repos nicht in die Quere kommen.
+# Replaces a site/app bundled in the main repo (e.g. the
+# example sites/main) with its own, separate git clone - and automatically
+# adds the path to the main repo's .gitignore, so the two repos don't
+# get in each other's way.
 #
-# Nutzung:  bash scripts/adopt-site-repo.sh <sites/name|apps/name> <git-url>
-# Beispiel: bash scripts/adopt-site-repo.sh sites/main https://github.com/<du>/meine-homepage.git
+# Usage:   bash scripts/adopt-site-repo.sh <sites/name|apps/name> <git-url>
+# Example: bash scripts/adopt-site-repo.sh sites/main https://github.com/<you>/my-homepage.git
 #
-# Hintergrund (der Fehler, den dieses Skript verhindert): Bleibt der Ordner
-# Teil des Haupt-Repos, loest sich ein `git pull` darin still auf den REMOTE
-# DES HAUPT-REPOS auf - nicht auf die eigentliche Website. Das Ergebnis ist
-# ein taeuschendes "Already up to date", obwohl die Seite nie aktualisiert
-# wird. Siehe README "Jede Seite als eigenes Git-Repo".
+# Background (the bug this script prevents): if the folder stays part of
+# the main repo, a `git pull` inside it silently resolves against the MAIN
+# REPO'S REMOTE - not the actual website. The result is a misleading
+# "Already up to date", even though the site is never updated.
+# See README "Each site as its own git repo".
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -21,47 +21,47 @@ TARGET="${1:-}"
 GIT_URL="${2:-}"
 
 if [[ -z "${TARGET}" || -z "${GIT_URL}" ]]; then
-  echo "Nutzung: bash scripts/adopt-site-repo.sh <sites/name|apps/name> <git-url>" >&2
+  echo "Usage: bash scripts/adopt-site-repo.sh <sites/name|apps/name> <git-url>" >&2
   exit 1
 fi
 
 DIR="${REPO_ROOT}/${TARGET}"
 
 if [[ ! -d "${DIR}" ]]; then
-  echo "FEHLER: ${DIR} existiert nicht." >&2
+  echo "ERROR: ${DIR} does not exist." >&2
   exit 1
 fi
 
-# Wichtig: "git -C DIR rev-parse --git-dir" alleine reicht nicht als Check -
-# es findet auch das .git des Haupt-Repos in einem Elternordner und meldet
-# faelschlich Erfolg (genau der Bug, den dieses Skript beheben soll). Statt-
-# dessen pruefen, ob DIR selbst die Repo-Wurzel ist.
+# Important: "git -C DIR rev-parse --git-dir" alone is not enough as a check -
+# it also finds the main repo's .git in a parent folder and falsely reports
+# success (exactly the bug this script is meant to fix). Instead, check
+# whether DIR itself is the repo's root.
 TOPLEVEL="$(git -C "${DIR}" rev-parse --show-toplevel 2>/dev/null || true)"
 if [[ -n "${TOPLEVEL}" && "$(cd "${DIR}" && pwd -P)" == "$(cd "${TOPLEVEL}" && pwd -P)" ]]; then
-  echo "FEHLER: ${DIR} ist bereits ein eigenes Git-Repo - nichts zu tun." >&2
+  echo "ERROR: ${DIR} is already its own git repo - nothing to do." >&2
   exit 1
 fi
 
 cd "${REPO_ROOT}"
 
-echo "==> Entferne ${TARGET} aus der Versionsverwaltung des Haupt-Repos (Dateien bleiben vorerst liegen)"
+echo "==> Removing ${TARGET} from the main repo's version control (files stay in place for now)"
 git rm -r --cached "${TARGET}" >/dev/null
 
 if ! grep -qxF "/${TARGET}/" .gitignore 2>/dev/null; then
   echo "/${TARGET}/" >> .gitignore
   git add .gitignore
-  echo "==> /${TARGET}/ zur .gitignore hinzugefuegt"
+  echo "==> Added /${TARGET}/ to .gitignore"
 fi
 
-git commit -m "Haupt-Repo: ${TARGET} ignorieren (jetzt eigenes Git-Repo)" >/dev/null
-echo "==> Commit im Haupt-Repo erstellt - nicht vergessen, ihn zu pushen (git push)"
+git commit -m "Main repo: ignore ${TARGET} (now its own git repo)" >/dev/null
+echo "==> Commit created in the main repo - don't forget to push it (git push)"
 
 BACKUP_DIR="${DIR}.bak-$(date +%Y%m%d%H%M%S)"
-echo "==> Alten Inhalt nach ${BACKUP_DIR} verschoben, dann frischer Klon von ${GIT_URL}"
+echo "==> Moved old content to ${BACKUP_DIR}, now cloning fresh from ${GIT_URL}"
 mv "${DIR}" "${BACKUP_DIR}"
 git clone "${GIT_URL}" "${DIR}"
 
-echo "==> Fertig. ${TARGET} ist jetzt ein eigenes Git-Repo (Klon von ${GIT_URL})."
-echo "    Alter Inhalt liegt zur Kontrolle in ${BACKUP_DIR} - danach manuell loeschen:"
+echo "==> Done. ${TARGET} is now its own git repo (clone of ${GIT_URL})."
+echo "    The old content is kept in ${BACKUP_DIR} for review - delete it manually afterwards:"
 echo "      rm -rf ${BACKUP_DIR}"
-echo "    Aktualisieren kuenftig per: bash scripts/deploy-site.sh $(basename "${TARGET}")"
+echo "    From now on, update it with: bash scripts/deploy-site.sh $(basename "${TARGET}")"
