@@ -5,8 +5,8 @@
 *.gpg
 backup.log
 
-# Eigenstaendige App-Repos, die auf dem Pi in apps/ hineingeklont werden
-# (getrennte Git-Historie, gehoeren nicht ins Infrastruktur-Repo).
+# Standalone app repos that get cloned into apps/ on the Pi
+# (separate git history, do not belong in the infrastructure repo).
 /apps/winecashing/
 /apps/ginperium/
 /apps/tipsy-trails/

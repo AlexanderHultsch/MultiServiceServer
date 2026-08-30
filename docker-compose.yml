@@ -4,14 +4,14 @@ services:
     restart: unless-stopped
     environment:
       TZ: ${TZ}
-      # Pi-hole v6: Passwort-Env-Name gegen docs.pi-hole.net/docker/configuration verifiziert
+      # Pi-hole v6: password env name verified against docs.pi-hole.net/docker/configuration
       FTLCONF_webserver_api_password: ${PIHOLE_PASSWORD}
       FTLCONF_dns_upstreams: "9.9.9.9;1.1.1.1"
-      # Ohne dies default Pi-hole v6 auf dns.listeningMode=LOCAL: es vertraut dann nur
-      # Anfragen aus dem eigenen Docker-Bridge-Subnetz und verwirft echte LAN-Clients
-      # stillschweigend als "non-local" (sichtbar im Log als "ignoring query from
-      # non-local network ..."). "ALL" ist hier sicher, weil Port 53 laut [M3]/[N4]
-      # ohnehin nur an ${PI_STATIC_IP} gebunden ist, nicht an 0.0.0.0.
+      # Without this, Pi-hole v6 defaults to dns.listeningMode=LOCAL: it then only trusts
+      # requests from its own Docker bridge subnet and silently drops real LAN clients
+      # as "non-local" (visible in the log as "ignoring query from
+      # non-local network ..."). "ALL" is safe here because port 53 is, per [M3]/[N4],
+      # bound only to ${PI_STATIC_IP} anyway, not to 0.0.0.0.
       FTLCONF_dns_listeningMode: "ALL"
     ports:
       - "${PI_STATIC_IP}:${PORT_DNS}:53/tcp"
@@ -21,70 +21,70 @@ services:
       - ./data/pihole/etc-pihole:/etc/pihole
     networks: [lan_net]
 
-  # Reverse Proxy & Webserver fuer ALLE Websites (statisch + dynamisch).
-  # cloudflared schickt jeden Hostnamen an caddy:80; Caddy verteilt anhand der
-  # Subdomain (Routing in config/caddy/Caddyfile). Ersetzt den frueheren
-  # nginx-"web"-Dienst.
+  # Reverse proxy & web server for ALL websites (static + dynamic).
+  # cloudflared forwards every hostname to caddy:80; Caddy distributes based on
+  # the subdomain (routing in config/caddy/Caddyfile). Replaces the former
+  # nginx "web" service.
   caddy:
     image: caddy:2.11.4-alpine
     restart: unless-stopped
     environment:
-      # Wird im Caddyfile als {$DOMAIN} eingesetzt (Textersetzung beim Einlesen).
+      # Used in the Caddyfile as {$DOMAIN} (text substitution on read-in).
       DOMAIN: ${DOMAIN}
     volumes:
       - ./config/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - ./sites:/srv:ro                 # statische Seiten (read-only)
-      - ./data/caddy/data:/data         # Caddy-Laufzeitdaten
+      - ./sites:/srv:ro                 # static sites (read-only)
+      - ./data/caddy/data:/data         # Caddy runtime data
       - ./data/caddy/config:/config
     networks: [edge]
-    # KEIN ports: (Constraint M8) - nur ueber cloudflared erreichbar
+    # NO ports: (constraint M8) - reachable only via cloudflared
 
-  # Beispiel fuer eine DYNAMISCHE App (eigener Container, eigenes Git-Repo).
-  # Winzige Node-App ohne Abhaengigkeiten - spaeter durch die echte App ersetzen.
-  # Caddy leitet app.${DOMAIN} hierher weiter (siehe Caddyfile).
+  # Example of a DYNAMIC app (own container, own git repo).
+  # Tiny Node app with no dependencies - replace with the real app later.
+  # Caddy forwards app.${DOMAIN} here (see Caddyfile).
   app-example:
     build: ./apps/app-example
     restart: unless-stopped
     networks: [edge]
-    # KEIN ports: - nur intern ueber caddy erreichbar
+    # NO ports: - reachable only internally via caddy
 
-  # Wine Caching - dynamische App (eigenes Repo, hineingeklont nach apps/winecashing/).
-  # Caddy leitet winecashing.${DOMAIN} hierher (siehe Caddyfile). Persistenz unter
-  # data/winecashing/ -> wandert automatisch ins naechtliche Backup.
+  # Wine Caching - dynamic app (own repo, cloned into apps/winecashing/).
+  # Caddy forwards winecashing.${DOMAIN} here (see Caddyfile). Persistence under
+  # data/winecashing/ -> automatically included in the nightly backup.
   winecashing:
     build: ./apps/winecashing
     restart: unless-stopped
     environment:
       PORT: "3000"
       DB_PATH: /data/winecashing.db
-    env_file: ./apps/winecashing/.env    # Secrets (SESSION_SECRET, ADMIN_*), liegt nur auf dem Pi
+    env_file: ./apps/winecashing/.env    # Secrets (SESSION_SECRET, ADMIN_*), lives only on the Pi
     volumes:
       - ./data/winecashing:/data
     networks: [edge]
-    # KEIN ports: - nur intern ueber caddy erreichbar
+    # NO ports: - reachable only internally via caddy
 
-  # GinPerium - dynamische App (eigenes Repo, hineingeklont nach apps/ginperium/).
-  # Caddy leitet ginperium.${DOMAIN} hierher (siehe Caddyfile). Node + SQLite.
-  # Hat jetzt (wie winecashing) einen Admin-Login -> braucht SESSION_SECRET/
-  # ADMIN_* aus der .env, die scripts/deploy.sh schreibt. Persistenz unter
-  # data/ginperium/ -> wandert automatisch ins naechtliche Backup.
+  # GinPerium - dynamic app (own repo, cloned into apps/ginperium/).
+  # Caddy forwards ginperium.${DOMAIN} here (see Caddyfile). Node + SQLite.
+  # Now has (like winecashing) an admin login -> needs SESSION_SECRET/
+  # ADMIN_* from the .env that scripts/deploy.sh writes. Persistence under
+  # data/ginperium/ -> automatically included in the nightly backup.
   ginperium:
     build: ./apps/ginperium
     restart: unless-stopped
     environment:
       PORT: "3000"
       DB_PATH: /data/ginperium.db
-    env_file: ./apps/ginperium/.env    # Secrets (SESSION_SECRET, ADMIN_*), liegt nur auf dem Pi
+    env_file: ./apps/ginperium/.env    # Secrets (SESSION_SECRET, ADMIN_*), lives only on the Pi
     volumes:
       - ./data/ginperium:/data
     networks: [edge]
-    # KEIN ports: - nur intern ueber caddy erreichbar
+    # NO ports: - reachable only internally via caddy
 
-  # Tipsy Trails - dynamische App (eigenes Repo, hineingeklont nach apps/tipsy-trails/).
-  # Caddy leitet tipsytrails.${DOMAIN} hierher (siehe Caddyfile). Node + Fastify + SQLite.
-  # Hat (wie winecashing/ginperium) einen Admin-Login -> braucht SESSION_SECRET/
-  # ADMIN_* aus der .env, die scripts/deploy.sh schreibt. Persistenz unter
-  # data/tipsy-trails/ -> wandert automatisch ins naechtliche Backup.
+  # Tipsy Trails - dynamic app (own repo, cloned into apps/tipsy-trails/).
+  # Caddy forwards tipsytrails.${DOMAIN} here (see Caddyfile). Node + Fastify + SQLite.
+  # Has (like winecashing/ginperium) an admin login -> needs SESSION_SECRET/
+  # ADMIN_* from the .env that scripts/deploy.sh writes. Persistence under
+  # data/tipsy-trails/ -> automatically included in the nightly backup.
   tipsy-trails:
     build: ./apps/tipsy-trails
     restart: unless-stopped
@@ -92,22 +92,22 @@ services:
       PORT: "3000"
       DB_PATH: /data/db/tipsy.db
       PUBLIC_ORIGIN: https://tipsytrails.${DOMAIN}
-    env_file: ./apps/tipsy-trails/.env    # Secrets (SESSION_SECRET, ADMIN_*), liegt nur auf dem Pi
+    env_file: ./apps/tipsy-trails/.env    # Secrets (SESSION_SECRET, ADMIN_*), lives only on the Pi
     volumes:
       - ./data/tipsy-trails:/data
     networks: [edge]
-    # KEIN ports: - nur intern ueber caddy erreichbar
+    # NO ports: - reachable only internally via caddy
 
-  # Bring2Bring! - dynamische App (eigenes Repo, hineingeklont nach apps/bring2bring/).
-  # Caddy leitet bring2bring.${DOMAIN} hierher (siehe Caddyfile). Node + SQLite,
-  # privates digitales Kochbuch. Hat (wie winecashing/ginperium/tipsy-trails)
-  # einen Admin-Login -> braucht SESSION_SECRET/ADMIN_* aus der .env, die
-  # scripts/deploy.sh schreibt. Persistenz unter data/bring2bring/ -> wandert
-  # automatisch ins naechtliche Backup.
+  # Bring2Bring! - dynamic app (own repo, cloned into apps/bring2bring/).
+  # Caddy forwards bring2bring.${DOMAIN} here (see Caddyfile). Node + SQLite,
+  # a private digital cookbook. Has (like winecashing/ginperium/tipsy-trails)
+  # an admin login -> needs SESSION_SECRET/ADMIN_* from the .env that
+  # scripts/deploy.sh writes. Persistence under data/bring2bring/ -> automatically
+  # included in the nightly backup.
   #
-  # Haertung nach Bring2Bring!-eigener SPEC Abschnitt 11 (bei den Geschwister-Apps
-  # bisher nicht angewendet - hier bewusst nur fuer diesen Dienst):
-  # read-only Root-Dateisystem, /tmp als tmpfs, keine zusaetzlichen Privilegien.
+  # Hardening per Bring2Bring!'s own SPEC section 11 (not applied to the sibling
+  # apps so far - deliberately only for this service here):
+  # read-only root filesystem, /tmp as tmpfs, no additional privileges.
   bring2bring:
     build: ./apps/bring2bring
     restart: unless-stopped
@@ -119,23 +119,23 @@ services:
       DB_PATH: /data/bring2bring.db
       UPLOAD_DIR: /data/uploads
       PUBLIC_BASE_URL: https://bring2bring.${DOMAIN}
-      # npm run seed:admin laeuft (siehe deploy.sh) INNERHALB des Containers;
-      # bei read_only: true braucht npm dafuer einen beschreibbaren Cache
-      # ausserhalb des read-only Root-Dateisystems.
+      # npm run seed:admin runs (see deploy.sh) INSIDE the container;
+      # with read_only: true, npm needs a writable cache for that
+      # outside the read-only root filesystem.
       NPM_CONFIG_CACHE: /tmp/.npm
-    # env_file OPTIONAL (Long-Form, Compose >= 2.24) statt wie bei den
-    # Geschwister-Apps zwingend: diese Datei entsteht erst, nachdem
-    # scripts/deploy.sh apps/bring2bring/ geklont hat. Waere sie zwingend, wuerde
-    # ein fehlender/fehlgeschlagener Bring2Bring!-Klon das GESAMTE
-    # docker-compose.yml ungueltig machen - dann wuerde nicht einmal Pi-hole
-    # starten und das ganze LAN haette kein DNS mehr.
+    # env_file OPTIONAL (long form, Compose >= 2.24) instead of mandatory like for
+    # the sibling apps: this file only comes into existence after
+    # scripts/deploy.sh has cloned apps/bring2bring/. If it were mandatory,
+    # a missing/failed Bring2Bring! clone would make the ENTIRE
+    # docker-compose.yml invalid - then not even Pi-hole would
+    # start and the whole LAN would have no DNS.
     env_file:
       - path: ./apps/bring2bring/.env
         required: false
     volumes:
       - ./data/bring2bring:/data
     networks: [edge]
-    # KEIN ports: - nur intern ueber caddy erreichbar
+    # NO ports: - reachable only internally via caddy
 
   cloudflared:
     image: cloudflare/cloudflared:2026.7.0

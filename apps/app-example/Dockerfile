@@ -1,17 +1,16 @@
-# Basis: Node.js LTS auf Alpine (klein, arm64-tauglich fuer den Pi).
+# Base: Node.js LTS on Alpine (small, arm64-capable for the Pi).
 FROM node:24-alpine
 
 WORKDIR /app
 
-# Erst nur package.json kopieren (Docker-Layer-Cache). Diese Beispiel-App hat
-# keine Abhaengigkeiten; sobald du welche hinzufuegst, die naechste Zeile
-# einkommentieren:
+# Copy only package.json first (Docker layer cache). This example app has
+# no dependencies; once you add some, uncomment the next line:
 COPY package.json ./
 # RUN npm install --omit=dev
 
 COPY server.js ./
 
-# Als unprivilegierter Nutzer laufen (Alpine-Node-Image bringt "node" mit).
+# Run as an unprivileged user (the Alpine node image comes with "node").
 USER node
 
 EXPOSE 3000
